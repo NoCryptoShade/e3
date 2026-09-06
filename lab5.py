@@ -382,13 +382,13 @@ def h_index(rq, m, q, host):
     # Virtual hosting: the Host header selects the site, not the IP address.
     if host in ("admin.lab", "internal.lab"):
         rq.send(200, page("Internportal",
-                          "<p>Intern bygg. Ikke for kunder.</p>"
+                          "<p>Internt bygg. Ikke for kunder.</p>"
                           "<p class='note'>Deploy-notat: /vault/</p>"),
                 extra={"X-Vhost": "internal"})
         return
     body = ("<p>Kontorrekvisita og datautstyr til bedrifter. "
             "Fri frakt på ordre over 500 kr.</p>"
-            "<p class='note'>Kontoen du skal bruke staar i oppgavearket.</p>")
+            "<p class='note'>Kontoen du skal bruke står i oppgavearket.</p>")
     cookies = [
         # A deliberately mixed set, so the flag matrix has something to find.
         "prefs=lang%3Dnb; Path=/; Max-Age=86400",
