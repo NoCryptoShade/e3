@@ -166,20 +166,64 @@ def jwt_decode(token):
 # ---------------------------------------------------------------------------
 
 PAGE = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>{title}</title>
-<style>body{{font-family:system-ui,sans-serif;max-width:44rem;margin:2rem auto;
-padding:0 1rem;line-height:1.5}}nav a{{margin-right:1rem}}
-code{{background:#eee;padding:.1rem .3rem}}</style></head>
-<body><nav><a href="/">Home</a><a href="/shop/">Shop</a><a href="/account">Account</a>
-<a href="/vault/">Vault</a><a href="/login">Log in</a><a href="/login2">Log in (v2)</a>
-<a href="/logout">Log out</a></nav><h1>{title}</h1>{body}</body></html>
+<html lang="nb"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} - Kontorlageret</title>
+<link rel="stylesheet" href="/style.css"></head>
+<body><header><a class="mark" href="/">Kontorlageret</a>
+<nav><a href="/shop/">Butikk</a><a href="/account">Min side</a>
+<a href="/vault/">Dokumenter</a><a href="/login">Logg inn</a>
+<a href="/logout">Logg ut</a></nav></header>
+<main><h1>{title}</h1>{body}</main>
+<footer>Kontorlageret AS, org. 918 273 645. Kundeservice 33 44 55 66.</footer>
+</body></html>
+"""
+
+STYLESHEET = """:root{--ink:#1c2330;--muted:#5b6472;--rule:#dfe3e8;--brand:#2f5d8a;
+--bg:#fff;--soft:#f5f7f9}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);background:var(--bg);
+font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{display:flex;align-items:baseline;gap:2rem;flex-wrap:wrap;
+padding:1.1rem 1.5rem;border-bottom:1px solid var(--rule)}
+.mark{font-size:1.15rem;font-weight:600;letter-spacing:-.02em;
+color:var(--ink);text-decoration:none}
+nav{display:flex;gap:1.25rem;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:.9rem}
+nav a:hover,nav a:focus{color:var(--brand);text-decoration:underline}
+main{max-width:44rem;margin:0 auto;padding:2rem 1.5rem 3rem}
+h1{font-size:1.5rem;font-weight:600;letter-spacing:-.01em;margin:0 0 1.25rem}
+p{margin:0 0 .85rem;max-width:38rem}
+ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+li{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;
+padding:.8rem 0;border-bottom:1px solid var(--rule)}
+li a{color:var(--brand);text-decoration:none}
+li a:hover{text-decoration:underline}
+.price{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rows{border-top:1px solid var(--rule);margin:0 0 1.25rem}
+.row{display:flex;justify-content:space-between;gap:1rem;
+padding:.7rem 0;border-bottom:1px solid var(--rule)}
+.row span:first-child{color:var(--muted)}
+form{background:var(--soft);border:1px solid var(--rule);border-radius:3px;
+padding:1.25rem;max-width:22rem}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.3rem}
+input{width:100%;padding:.5rem .6rem;border:1px solid #c3cad3;border-radius:2px;
+font:inherit;font-size:.95rem;margin-bottom:.9rem;background:#fff}
+input:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+button{background:var(--brand);color:#fff;border:0;border-radius:2px;
+padding:.55rem 1.1rem;font:inherit;font-size:.95rem;cursor:pointer}
+button:hover{background:#26496c}
+.note{color:var(--muted);font-size:.88rem}
+footer{max-width:44rem;margin:0 auto;padding:1.25rem 1.5rem 2.5rem;
+color:var(--muted);font-size:.82rem;border-top:1px solid var(--rule)}
+@media(max-width:34rem){header{gap:.6rem}main{padding:1.5rem 1.1rem 2rem}}
 """
 
 LOGIN_FORM = """<form method="post" action="{action}">
-<p><label>Username <input name="username"></label></p>
-<p><label>Password <input name="password" type="password"></label></p>
-<p><button type="submit">Log in</button></p></form>
-<p>{note}</p>"""
+<label for="u">Brukernavn</label><input id="u" name="username">
+<label for="p">Passord</label><input id="p" name="password" type="password">
+<button type="submit">Logg inn</button></form>
+<p class="note">{note}</p>"""
 
 
 def page(title, body):
@@ -299,7 +343,7 @@ class LabHandler(BaseHTTPRequestHandler):
         # RFC 9112: an HTTP/1.1 request without a Host header is a bad request.
         if self.request_version == "HTTP/1.1" and not self.headers.get("Host"):
             self.send(400, page("400 Bad Request",
-                                "<p>HTTP/1.1 requires a Host header.</p>"))
+                                "<p>HTTP/1.1 krever en Host-header.</p>"))
             return
 
         parsed = urlparse(self.path)
@@ -307,9 +351,9 @@ class LabHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
 
         if not self.rate_ok(path):
-            self.send(429, page("429 Too Many Requests",
-                                "<p>Slow down. The window is "
-                                "{0:.0f} seconds.</p>".format(RATE_WINDOW)),
+            self.send(429, page("For mange foresporsler",
+                                "<p>Ta det litt roligere. Vinduet er "
+                                "{0:.0f} sekunder.</p>".format(RATE_WINDOW)),
                       extra={"Retry-After": str(int(RATE_WINDOW))})
             return
 
@@ -319,15 +363,15 @@ class LabHandler(BaseHTTPRequestHandler):
             match = re.match(pattern, path)
             if match:
                 if self.command not in methods:
-                    self.send(405, page("405 Method Not Allowed",
-                                        "<p>Allowed: {0}</p>".format(", ".join(methods))),
+                    self.send(405, page("Metoden er ikke tillatt",
+                                        "<p>Tillatt her: {0}</p>".format(", ".join(methods))),
                               extra={"Allow": ", ".join(methods)})
                     return
                 fn(self, match, query, host)
                 return
 
-        self.send(404, page("404 Not Found",
-                            "<p>No handler for <code>{0}</code>.</p>".format(path)))
+        self.send(404, page("Siden finnes ikke",
+                            "<p>Fant ingen side paa {0}.</p>".format(path)))
 
 
 # ---------------------------------------------------------------------------
@@ -337,27 +381,29 @@ class LabHandler(BaseHTTPRequestHandler):
 def h_index(rq, m, q, host):
     # Virtual hosting: the Host header selects the site, not the IP address.
     if host in ("admin.lab", "internal.lab"):
-        rq.send(200, page("Internal portal",
-                          "<p>Internal build. Not for customers.</p>"
-                          "<p>Deploy notes: <code>/vault/</code></p>"),
+        rq.send(200, page("Internportal",
+                          "<p>Intern bygg. Ikke for kunder.</p>"
+                          "<p class='note'>Deploy-notat: /vault/</p>"),
                 extra={"X-Vhost": "internal"})
         return
-    body = ("<p>Demo shop for teaching HTTP.</p>"
-            "<p>Accounts are listed in your task sheet.</p>")
+    body = ("<p>Kontorrekvisita og datautstyr til bedrifter. "
+            "Fri frakt paa ordre over 500 kr.</p>"
+            "<p class='note'>Kontoen du skal bruke staar i oppgavearket.</p>")
     cookies = [
         # A deliberately mixed set, so the flag matrix has something to find.
         "prefs=lang%3Dnb; Path=/; Max-Age=86400",
         "tracking=t_88213; Path=/; SameSite=Lax",
         "consent=yes; Path=/; Secure",
     ]
-    rq.send(200, page("Lab shop", body), extra={"X-Vhost": "public"}, cookies=cookies)
+    rq.send(200, page("Velkommen", body), extra={"X-Vhost": "public"}, cookies=cookies)
 
 
 def h_shop(rq, m, q, host):
     items = "".join(
-        "<li><a href='/shop/item?id={0}'>{1}</a> - {2} kr</li>".format(
+        "<li><a href='/shop/item?id={0}'>{1}</a>"
+        "<span class='price'>{2} kr</span></li>".format(
             o["order_id"], o["item"], o["price_nok"]) for o in ORDERS)
-    rq.send(200, page("Shop", "<ul>{0}</ul>".format(items)))
+    rq.send(200, page("Butikk", "<ul>{0}</ul>".format(items)))
 
 
 def h_shop_item(rq, m, q, host):
@@ -368,10 +414,13 @@ def h_shop_item(rq, m, q, host):
     for o in ORDERS:
         if o["order_id"] == wanted:
             rq.send(200, page(o["item"],
-                              "<p>Price: {0} kr</p><p>Status: {1}</p>".format(
-                                  o["price_nok"], o["status"])))
+                              "<div class='rows'>"
+                              "<div class='row'><span>Pris</span><span>{0} kr</span></div>"
+                              "<div class='row'><span>Status</span><span>{1}</span></div>"
+                              "</div>".format(o["price_nok"], o["status"])))
             return
-    rq.send(404, page("404 Not Found", "<p>No such item.</p>"))
+    rq.send(404, page("Fant ikke varen",
+                      "<p>Denne varen finnes ikke i sortimentet.</p>"))
 
 
 def h_login(rq, m, q, host):
@@ -385,7 +434,7 @@ def h_login(rq, m, q, host):
             cookies = ["sid={0}; Path=/".format(sid)]  # no HttpOnly, no SameSite
         user = _sessions.get(sid)
         note = "Logged in as {0}.".format(user) if user else "Not logged in."
-        rq.send(200, page("Log in", LOGIN_FORM.format(action="/login", note=note)),
+        rq.send(200, page("Logg inn", LOGIN_FORM.format(action="/login", note=note)),
                 cookies=cookies)
         return
 
@@ -398,15 +447,15 @@ def h_login(rq, m, q, host):
     if record:
         time.sleep(0.35)
     if not record or record["password"] != password:
-        rq.send(401, page("Log in", LOGIN_FORM.format(
-            action="/login", note="Wrong username or password.")))
+        rq.send(401, page("Logg inn", LOGIN_FORM.format(
+            action="/login", note="Feil brukernavn eller passord.")))
         return
 
     sid = rq.cookies().get("sid")
     if not sid:
         sid = next_session_id()
     _sessions[sid] = username          # same id, new privileges
-    rq.send(303, page("Logged in", "<p>Redirecting.</p>"),
+    rq.send(303, page("Logget inn", "<p>Sender deg videre.</p>"),
             extra={"Location": "/account"},
             cookies=["sid={0}; Path=/".format(sid)])
 
@@ -416,7 +465,7 @@ def h_login2(rq, m, q, host):
     if rq.command in ("GET", "HEAD"):
         user = rq.current_user_v2()
         note = "Logged in as {0}.".format(user) if user else "Not logged in."
-        rq.send(200, page("Log in (v2)", LOGIN_FORM.format(action="/login2", note=note)))
+        rq.send(200, page("Logg inn", LOGIN_FORM.format(action="/login2", note=note)))
         return
 
     params = rq.body_params()
@@ -425,15 +474,15 @@ def h_login2(rq, m, q, host):
     record = USERS.get(username)
     time.sleep(0.35)                                   # constant cost either way
     if not record or record["password"] != password:
-        rq.send(401, page("Log in (v2)", LOGIN_FORM.format(
-            action="/login2", note="Wrong username or password.")))
+        rq.send(401, page("Logg inn", LOGIN_FORM.format(
+            action="/login2", note="Feil brukernavn eller passord.")))
         return
 
     old = rq.cookies().get("sid2")
     _sessions_v2.pop(old, None)                        # rotate on privilege change
     sid = secrets.token_hex(16)                        # unpredictable
     _sessions_v2[sid] = username
-    rq.send(303, page("Logged in", "<p>Redirecting.</p>"),
+    rq.send(303, page("Logget inn", "<p>Sender deg videre.</p>"),
             extra={"Location": "/account"},
             cookies=["sid2={0}; Path=/; HttpOnly; SameSite=Strict".format(sid)])
 
@@ -443,8 +492,8 @@ def h_logout(rq, m, q, host):
     sid2 = rq.cookies().get("sid2")
     if sid2:
         _sessions_v2.pop(sid2, None)
-    rq.send(200, page("Logged out",
-                      "<p>You have been logged out.</p>"),
+    rq.send(200, page("Logget ut",
+                      "<p>Du er logget ut.</p>"),
             cookies=["sid=; Path=/; Max-Age=0",
                      "sid2=; Path=/; Max-Age=0"])
 
@@ -454,27 +503,34 @@ def h_account(rq, m, q, host):
     account_body = ""
     if username:
         u = USERS[username]
-        account_body = ("<p>Name: {0}</p><p>Email: {1}</p>"
-                        "<p>Customer number: {2}</p>").format(
-                            u["name"], u["email"], u["customer_id"])
+        account_body = ("<div class='rows'>"
+                        "<div class='row'><span>Navn</span><span>{0}</span></div>"
+                        "<div class='row'><span>E-post</span><span>{1}</span></div>"
+                        "<div class='row'><span>Kundenummer</span><span>{2}</span></div>"
+                        "</div>").format(u["name"], u["email"], u["customer_id"])
     if not username:
         # The redirect is issued, but the body was rendered first and is sent anyway.
-        hidden = page("Account", "<p>Name: Student Bruker</p>"
-                                 "<p>Email: student@lab.local</p>"
-                                 "<p>Customer number: 1041</p>")
+        hidden = page("Min side",
+                      "<div class='rows'>"
+                      "<div class='row'><span>Navn</span><span>Student Bruker</span></div>"
+                      "<div class='row'><span>E-post</span><span>student@lab.local</span></div>"
+                      "<div class='row'><span>Kundenummer</span><span>1041</span></div>"
+                      "</div>")
         rq.send(302, hidden, extra={"Location": "/login"})
         return
-    rq.send(200, page("Account", account_body))
+    rq.send(200, page("Min side", account_body))
 
 
 def h_vault_index(rq, m, q, host):
     username = rq.current_user() or rq.current_user_v2()
     if not username:
-        rq.send(403, page("403 Forbidden", "<p>Log in to list this directory.</p>"))
+        rq.send(403, page("Ingen tilgang",
+                          "<p>Logg inn for aa se dokumentene.</p>"))
         return
-    items = "".join("<li><a href='/vault/{0}'>{0}</a></li>".format(f)
+    items = "".join("<li><a href='/vault/{0}'>{0}</a>"
+                    "<span class='price'>PDF</span></li>".format(f)
                     for f in VAULT_FILES)
-    rq.send(200, page("Vault", "<ul>{0}</ul>".format(items)))
+    rq.send(200, page("Dokumenter", "<ul>{0}</ul>".format(items)))
 
 
 def h_vault_file(rq, m, q, host):
@@ -482,12 +538,12 @@ def h_vault_file(rq, m, q, host):
     name = m.group("name")
     owner = VAULT_FILES.get(name)
     if owner:
-        rq.send(403, page("403 Forbidden",
-                          "<p>Access denied to <code>{0}</code>. "
-                          "Owner: {1}. Ask the owner for access, or ask "
-                          "drift to grant it.</p>".format(name, owner)))
+        rq.send(403, page("Ingen tilgang",
+                          "<p>Du har ikke tilgang til <b>{0}</b>. "
+                          "Eier: {1}. Be eier om tilgang, eller kontakt "
+                          "drift.</p>".format(name, owner)))
     else:
-        rq.send(403, page("403 Forbidden", "<p>Access denied.</p>"))
+        rq.send(403, page("Ingen tilgang", "<p>Du har ikke tilgang.</p>"))
 
 
 def h_api_login(rq, m, q, host):
@@ -560,12 +616,17 @@ def h_api_admin(rq, m, q, host):
 
 def h_slow(rq, m, q, host):
     time.sleep(1.2)
-    rq.send(200, page("Slow", "<p>That took a while.</p>"))
+    rq.send(200, page("Treg side", "<p>Det tok en stund.</p>"))
 
 
 def h_status(rq, m, q, host):
     code = int(m.group("code"))
-    rq.send(code, page("{0}".format(code), "<p>Requested status {0}.</p>".format(code)))
+    rq.send(code, page("{0}".format(code), "<p>Du ba om status {0}.</p>".format(code)))
+
+
+def h_style(rq, m, q, host):
+    rq.send(200, STYLESHEET, "text/css; charset=utf-8",
+            extra={"Cache-Control": "max-age=60"})
 
 
 def h_robots(rq, m, q, host):
@@ -575,6 +636,7 @@ def h_robots(rq, m, q, host):
 
 ROUTES = [
     (r"^/$",                            ("GET", "HEAD"),         h_index),
+    (r"^/style\.css$",                  ("GET", "HEAD"),         h_style),
     (r"^/robots\.txt$",                 ("GET", "HEAD"),         h_robots),
     (r"^/shop/?$",                      ("GET", "HEAD"),         h_shop),
     (r"^/shop/item$",                   ("GET", "HEAD"),         h_shop_item),
