@@ -83,13 +83,13 @@ USERS = {
 ORDERS = [
     {"order_id": 5001, "customer_id": 1041, "item": "Nettverkskabel Cat6 5m",
      "price_nok": 149, "status": "sendt", "internal_margin_pct": 62,
-     "warehouse_note": "billigste leverandoer, byttet uten aa si fra"},
+     "warehouse_note": "billigste leverandør, byttet uten å si fra"},
     {"order_id": 5002, "customer_id": 1041, "item": "USB-hub 4 port",
      "price_nok": 399, "status": "pakkes", "internal_margin_pct": 41,
-     "warehouse_note": "returrate hoey paa denne"},
-    {"order_id": 5003, "customer_id": 1042, "item": "Skjermarm dobbel",
+     "warehouse_note": "returrate høy på denne"},
+    {"order_id": 5003, "customer_id": 1042, "item": "Skjermarm for to skjjermer",
      "price_nok": 1290, "status": "levert", "internal_margin_pct": 55,
-     "warehouse_note": "kunde klaget, gitt 20 pct avslag"},
+     "warehouse_note": "kunde klaget, gitt 20 % avslag"},
 ]
 
 VAULT_FILES = {
@@ -342,7 +342,7 @@ class LabHandler(BaseHTTPRequestHandler):
     def route(self):
         # RFC 9112: an HTTP/1.1 request without a Host header is a bad request.
         if self.request_version == "HTTP/1.1" and not self.headers.get("Host"):
-            self.send(400, page("400 Bad Request",
+            self.send(400, page("Ugyldig forespørsel",
                                 "<p>HTTP/1.1 krever en Host-header.</p>"))
             return
 
@@ -351,7 +351,7 @@ class LabHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
 
         if not self.rate_ok(path):
-            self.send(429, page("For mange foresporsler",
+            self.send(429, page("For mange forespørsler",
                                 "<p>Ta det litt roligere. Vinduet er "
                                 "{0:.0f} sekunder.</p>".format(RATE_WINDOW)),
                       extra={"Retry-After": str(int(RATE_WINDOW))})
@@ -371,7 +371,7 @@ class LabHandler(BaseHTTPRequestHandler):
                 return
 
         self.send(404, page("Siden finnes ikke",
-                            "<p>Fant ingen side paa {0}.</p>".format(path)))
+                            "<p>Fant ingen side på {0}.</p>".format(path)))
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +387,7 @@ def h_index(rq, m, q, host):
                 extra={"X-Vhost": "internal"})
         return
     body = ("<p>Kontorrekvisita og datautstyr til bedrifter. "
-            "Fri frakt paa ordre over 500 kr.</p>"
+            "Fri frakt på ordre over 500 kr.</p>"
             "<p class='note'>Kontoen du skal bruke staar i oppgavearket.</p>")
     cookies = [
         # A deliberately mixed set, so the flag matrix has something to find.
@@ -433,7 +433,7 @@ def h_login(rq, m, q, host):
             _sessions[sid] = None                      # anonymous session
             cookies = ["sid={0}; Path=/".format(sid)]  # no HttpOnly, no SameSite
         user = _sessions.get(sid)
-        note = "Logged in as {0}.".format(user) if user else "Not logged in."
+        note = "Innlogget som {0}.".format(user) if user else "Ikke innlogget."
         rq.send(200, page("Logg inn", LOGIN_FORM.format(action="/login", note=note)),
                 cookies=cookies)
         return
@@ -464,7 +464,7 @@ def h_login2(rq, m, q, host):
     """The same flow done correctly, for comparison."""
     if rq.command in ("GET", "HEAD"):
         user = rq.current_user_v2()
-        note = "Logged in as {0}.".format(user) if user else "Not logged in."
+        note = "Innlogget som {0}.".format(user) if user else "Ikke innlogget."
         rq.send(200, page("Logg inn", LOGIN_FORM.format(action="/login2", note=note)))
         return
 
@@ -525,7 +525,7 @@ def h_vault_index(rq, m, q, host):
     username = rq.current_user() or rq.current_user_v2()
     if not username:
         rq.send(403, page("Ingen tilgang",
-                          "<p>Logg inn for aa se dokumentene.</p>"))
+                          "<p>Logg inn for å se dokumentene.</p>"))
         return
     items = "".join("<li><a href='/vault/{0}'>{0}</a>"
                     "<span class='price'>PDF</span></li>".format(f)
