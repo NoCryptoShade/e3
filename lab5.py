@@ -655,6 +655,26 @@ ROUTES = [
 ]
 
 
+class LabServer(ThreadingHTTPServer):
+    """Keeps the console readable.
+
+    A browser routinely opens connections it never uses and closes tabs
+    mid-response. That surfaces as ConnectionResetError or BrokenPipeError
+    deep inside socketserver, and printing a twenty line traceback for it
+    would bury the access log the students are meant to be reading. Real
+    errors still print in full.
+    """
+
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError,
+                            ConnectionAbortedError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Lesson 5 teaching lab")
     ap.add_argument("--port", type=int, default=8080)
@@ -668,7 +688,7 @@ def main():
         os.remove(args.log)
 
     bind = "0.0.0.0" if args.expose else "127.0.0.1"
-    httpd = ThreadingHTTPServer((bind, args.port), LabHandler)
+    httpd = LabServer((bind, args.port), LabHandler)
     httpd.log_path = args.log
 
     print("lab5 listening on http://{0}:{1}/".format(
