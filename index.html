@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The board - Metasploitable 2</title>
+<style>
+:root{
+  --bg:#12161c; --panel:#1a1f27; --panel2:#151a21; --line:#2a323d;
+  --ink:#e6e9ee; --muted:#8b95a3; --dim:#5f6a78;
+  --accent:#d98b3a; --done:#4a9d6e; --core:#5b8fc7; --depth:#b9793f; --stretch:#8a6ba8;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace}
+
+header{border-bottom:1px solid var(--line);background:var(--panel2);
+  position:sticky;top:0;z-index:10}
+.hwrap{max-width:60rem;margin:0 auto;padding:.9rem 1.25rem;
+  display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap}
+.brand{font-size:1.05rem;font-weight:650;letter-spacing:-.01em}
+.brand span{color:var(--muted);font-weight:400;font-size:.85rem;margin-left:.6rem}
+.spacer{flex:1}
+.count{font-size:.85rem;color:var(--muted)}
+.count b{color:var(--accent);font-size:1.15rem}
+.bar{height:3px;background:var(--line);width:100%}
+.bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+
+main{max-width:60rem;margin:0 auto;padding:1.75rem 1.25rem 5rem}
+.intro{color:var(--muted);max-width:44rem;margin:0 0 1.5rem}
+.intro strong{color:var(--ink);font-weight:600}
+
+h2{font-size:1.15rem;margin:2.25rem 0 .35rem;font-weight:650;letter-spacing:-.01em}
+h2 em{font-style:normal;color:var(--dim);font-weight:400;font-size:.85rem;margin-left:.6rem}
+.tiernote{color:var(--muted);font-size:.9rem;margin:0 0 1rem;max-width:44rem}
+
+.route{background:var(--panel);border:1px solid var(--line);border-radius:5px;
+  margin-bottom:.7rem;overflow:hidden}
+.route.done{border-color:#2f5a45}
+.rtop{display:flex;align-items:flex-start;gap:.85rem;padding:.85rem 1rem}
+.chk{appearance:none;width:20px;height:20px;flex:0 0 20px;margin-top:.15rem;
+  border:1.5px solid var(--dim);border-radius:4px;background:transparent;cursor:pointer;
+  position:relative;transition:.15s}
+.chk:hover{border-color:var(--accent)}
+.chk:checked{background:var(--done);border-color:var(--done)}
+.chk:checked::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;
+  border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.rmain{flex:1;min-width:0}
+.rhead{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin-bottom:.2rem}
+.port{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;
+  background:#232a34;color:var(--accent);padding:.1rem .45rem;border-radius:3px}
+.svc{font-weight:600}
+.tag{font-size:.68rem;letter-spacing:.06em;padding:.1rem .4rem;border-radius:3px;
+  border:1px solid currentColor;text-transform:uppercase}
+.tag.core{color:var(--core)} .tag.depth{color:var(--depth)} .tag.stretch{color:var(--stretch)}
+.goal{color:var(--muted);font-size:.93rem}
+.route.done .svc{color:var(--done)}
+
+.rbody{padding:0 1rem 1rem 3.2rem;display:none}
+.route.open .rbody{display:block}
+.toggle{background:none;border:0;color:var(--dim);cursor:pointer;font-size:.8rem;
+  padding:.15rem .4rem;border-radius:3px}
+.toggle:hover{color:var(--accent);background:#232a34}
+
+.fields{display:flex;gap:.6rem;flex-wrap:wrap;margin:.5rem 0 .75rem}
+label.f{display:flex;flex-direction:column;gap:.25rem;font-size:.78rem;color:var(--dim)}
+input.t,textarea.t{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+  color:var(--ink);font:inherit;font-size:.88rem;padding:.4rem .55rem}
+input.t{width:11rem}
+textarea.t{width:100%;min-height:3.2rem;resize:vertical}
+input.t:focus,textarea.t:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+
+.hints{margin-top:.5rem}
+.hint{margin-bottom:.4rem}
+.hbtn{background:#232a34;border:1px solid var(--line);color:var(--muted);
+  font:inherit;font-size:.82rem;padding:.3rem .7rem;border-radius:4px;cursor:pointer}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.htext{display:none;margin-top:.4rem;padding:.55rem .75rem;background:var(--panel2);
+  border-left:2px solid var(--accent);border-radius:0 4px 4px 0;font-size:.9rem;color:var(--muted)}
+.hint.shown .htext{display:block}
+.hint.shown .hbtn{display:none}
+
+.tools{margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--line);
+  display:flex;gap:.6rem;flex-wrap:wrap}
+.btn{background:var(--panel);border:1px solid var(--line);color:var(--ink);font:inherit;
+  font-size:.88rem;padding:.5rem .9rem;border-radius:4px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.warn:hover{border-color:#b5544a;color:#d97b70}
+
+#out{width:100%;min-height:14rem;margin-top:1rem;display:none;background:var(--panel2);
+  border:1px solid var(--line);border-radius:4px;color:var(--ink);padding:.75rem;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem}
+
+.debrief{margin-top:2.5rem;background:var(--panel);border:1px solid var(--line);
+  border-radius:5px;padding:1.1rem 1.25rem}
+.debrief h3{margin:0 0 .5rem;font-size:1rem}
+.debrief ol{margin:0;padding-left:1.2rem;color:var(--muted)}
+.debrief li{margin-bottom:.45rem}
+footer{max-width:60rem;margin:0 auto;padding:0 1.25rem 3rem;color:var(--dim);font-size:.82rem}
+@media (max-width:34rem){
+  .rbody{padding-left:1rem}
+  input.t{width:100%}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hwrap">
+    <div class="brand">The board <span>Metasploitable 2</span></div>
+    <div class="spacer"></div>
+    <div class="count"><b id="n">0</b> / <span id="tot">14</span> shells</div>
+  </div>
+  <div class="bar"><i id="pb"></i></div>
+</header>
+
+<main>
+  <p class="intro">Every route here ends in a shell on the target. A route counts when you
+  have the shell <strong>and</strong> can say why that service let you in. Both halves.
+  Hints are behind the buttons, and nobody finishes all fourteen. Go for range rather than
+  the same trick five times. <strong>Your progress is saved in this browser</strong>, so you
+  can reload without losing it.</p>
+
+  <div id="board"></div>
+
+  <div class="debrief">
+    <h3>Debrief</h3>
+    <ol>
+      <li>How many shells did you get, and which user did each land you as?</li>
+      <li>Sort your routes into groups by <em>why</em> the service let you in. Not by port,
+          not by tool. You should end up with four or five groups. If two reasons read the
+          same, you have written the symptom instead of the cause.</li>
+      <li>Which routes had a CVE and which did not? If you had only a CVE-based scanner
+          report for this host, how many of your shells would you have seen coming?</li>
+      <li>Rank your routes by how hard the finding would be to <em>fix</em>, not by how bad
+          it is. The order is not what you expect.</li>
+    </ol>
+  </div>
+
+  <div class="tools">
+    <button class="btn" id="export">Export my notes table</button>
+    <button class="btn" id="expand">Expand all</button>
+    <button class="btn warn" id="reset">Reset progress</button>
+  </div>
+  <textarea id="out" readonly></textarea>
+</main>
+
+<footer>Gokstad Akademiet &middot; Advanced Cybersecurity &middot; Module 1 &middot; Lesson 4 &middot; Week 37</footer>
+
+<script>
+const TIERS = [
+ {name:"Tier 1. No exploit required", time:"25 min",
+  note:"Four ways onto this host that involve tricking no software at all. Clear all four before moving on.",
+  routes:[
+   {id:"1.1", port:"1524", svc:"Something is already listening here", lvl:"core",
+    goal:"Look at what nmap called this port, then connect to it with nc. Nothing will prompt you. Type a command anyway.",
+    hints:["No exploit, no module, no credentials.","It will not greet you. Connect, type id, press enter."]},
+   {id:"1.2", port:"23", svc:"Telnet", lvl:"core",
+    goal:"The credentials for this box are the ones you have used since week 36 to read its console. Nothing more clever is required.",
+    hints:["You already know them.","The same pair you use on the console. Both words are identical."]},
+   {id:"1.3", port:"5900", svc:"VNC", lvl:"core",
+    goal:"One password, and it is a word you would guess in three tries. There is a login scanner under auxiliary/scanner/vnc/ if you prefer to be systematic. Connect with vncviewer once you have it, and note which desktop session you land in.",
+    hints:["The password is what the thing itself is called, generically.","It is the word password."]},
+   {id:"1.4", port:"3306", svc:"MySQL", lvl:"core", noshell:true,
+    goal:"The database root account has no password at all. Get in with the mysql client. This one does not give you a shell by itself, so answer the question instead: what can you read from here, and which of your other routes does it help with?",
+    hints:["mysql -h $T -u root","Leave the password out entirely. Do not type one, do not pass -p."]}
+  ]},
+ {name:"Tier 2. Metasploit", time:"60 min",
+  note:"Eight services, eight modules. The service is named, the module is not. Use search inside msfconsole. Most want a reverse payload, which means LHOST, which means your host-only address and not your laptop's normal one.",
+  routes:[
+   {id:"2.1", port:"139/445", svc:"Samba 3.x", lvl:"core",
+    goal:"The module has usermap in its name. The shell you get is raw with no prompt, so type a command in blind. The flaw class here is the topic of lesson 7, and you should be able to name it before you leave.",
+    hints:["search samba, look for usermap.","LHOST must be your host-only address. Check with ip addr."]},
+   {id:"2.2", port:"3306", svc:"MySQL, again", lvl:"core",
+    goal:"You got into the database in 1.4. Now turn that into a shell. The database can write files to disk and load code from them, which is a feature and not a bug. Find the module that uses it, and say what a database is doing with that capability in the first place.",
+    hints:["search mysql, and look for the payload module rather than the login scanner.","USERNAME is root and PASSWORD is empty. Set it to nothing rather than omitting it."]},
+   {id:"2.3", port:"6667", svc:"UnrealIRCd", lvl:"core",
+    goal:"Somebody poisoned the download. Once you have the shell, read the module description and say what actually went wrong, given that it was not a coding mistake.",
+    hints:["search unreal.","Reverse payload, so LHOST."]},
+   {id:"2.4", port:"1099", svc:"Java RMI", lvl:"depth",
+    goal:"The check for this one told you the class loader is enabled. Turn that into a shell. The payload family here is different from the others, so read what the module offers you.",
+    hints:["search rmi.","This one uses a Java payload rather than a command payload."]},
+   {id:"2.5", port:"8787", svc:"Ruby DRb", lvl:"depth",
+    goal:"Distributed Ruby, doing what it was designed to do.",
+    hints:["search drb.","The module name ends in remote_codeexec."]},
+   {id:"2.6", port:"8180", svc:"Apache Tomcat", lvl:"depth",
+    goal:"Two steps. First find the manager credentials, which were never changed from the pair shipped in the documentation. Then use the manager to run code, which is what the manager is for. RPORT is not 8080.",
+    hints:["auxiliary/scanner/http/tomcat_mgr_login finds the pair.","Username and password are both the name of the software. Then tomcat_mgr_upload, RPORT 8180."]},
+   {id:"2.7", port:"5432", svc:"PostgreSQL", lvl:"depth",
+    goal:"You already proved last week that authentication succeeds. Turn that into code execution. Note which user you land as and why it is not root.",
+    hints:["search postgres. You want the payload module.","Default credentials, both the name of the database."]},
+   {id:"2.8", port:"80", svc:"TWiki", lvl:"depth",
+    goal:"Browse the web root and find the wiki among the applications listed. It has remote code execution in one of its scripts, and the module is named after the affected function. Finding the application is part of the task.",
+    hints:["Browse to the web root and read the list of applications.","search twiki. The module is named after the affected script."]}
+  ]},
+ {name:"Tier 3. Manual", time:"35 min",
+  note:"No modules named, and for two of these no module exists. These are worth more than the whole of tier 2.",
+  routes:[
+   {id:"3.1", port:"2049", svc:"NFS", lvl:"depth",
+    goal:"Ask the service what it shares, mount it from Kali, and work out what you can do with write access to somebody else's filesystem. The route to a shell from there goes through a different port, and you already know which one because it has been open the whole time.",
+    hints:["showmount -e tells you the export. Mount it with mount -t nfs.","You now have write access to a home directory. What does SSH read out of one?"]},
+   {id:"3.2", port:"512-514", svc:"The r-services", lvl:"depth",
+    goal:"Three ports from an era when hosts trusted each other by name. Find out what file on the target grants that trust and what has to be in it. Then log in without a password. You may need to install a client.",
+    hints:["The file is .rhosts and it lives in a home directory. Look at what is already in root's.","apt install rsh-client, then rlogin -l root"]},
+   {id:"3.3", port:"80", svc:"WebDAV", lvl:"depth",
+    goal:"Apache here was built with DAV, and one directory under the web root accepts it. Find the directory, confirm what methods it allows, then put a file there and make the server run it. No module for this one, curl is enough. The reason it works is a sentence about two permissions that should never be granted to the same directory.",
+    hints:["curl -X OPTIONS on the directory tells you what it allows.","PUT a .php file with curl -T, then request it in a browser."]},
+   {id:"3.4", port:"local", svc:"Escalate", lvl:"stretch",
+    goal:"Several of your shells were not root. Pick one and escalate. This host runs a very old kernel and an equally old device manager. searchsploit works offline. Read the exploit source before running it, because it needs an argument you have to look up on the target first.",
+    hints:["uname -a gives you the kernel. searchsploit that.","The target is udev. The exploit needs a PID you find in /proc/net/netlink."]},
+   {id:"3.5", port:"22", svc:"OpenSSH 4.7p1", lvl:"stretch",
+    goal:"In 2008 Debian's package broke key generation so badly that the entire keyspace fits on a disk. Find out what happened, then get in with a key rather than a password.",
+    hints:["Search for the Debian OpenSSL predictable PRNG problem, 2008.","The key sets are packaged. Metasploit has ssh_login_pubkey."]}
+  ]}
+];
+
+const KEY = "msfboard.v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e) { state = {}; }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function st(id){ return state[id] || (state[id] = {done:false, user:"", why:"", hints:[]}); }
+
+const board = document.getElementById("board");
+let total = 0;
+
+TIERS.forEach(tier => {
+  const h = document.createElement("h2");
+  h.innerHTML = tier.name + ' <em>' + tier.time + '</em>';
+  board.appendChild(h);
+  const n = document.createElement("p");
+  n.className = "tierlnote tiernote"; n.textContent = tier.note;
+  board.appendChild(n);
+
+  tier.routes.forEach(r => {
+    if (!r.noshell) total++;
+    const s = st(r.id);
+    const el = document.createElement("div");
+    el.className = "route" + (s.done ? " done" : "");
+    el.innerHTML =
+      '<div class="rtop">' +
+        '<input type="checkbox" class="chk"' + (s.done ? " checked" : "") + ' aria-label="done">' +
+        '<div class="rmain">' +
+          '<div class="rhead">' +
+            '<span class="port mono">' + r.port + '</span>' +
+            '<span class="svc">' + r.svc + '</span>' +
+            '<span class="tag ' + r.lvl + '">' + r.lvl + '</span>' +
+            '<span class="spacer"></span>' +
+            '<button class="toggle">details</button>' +
+          '</div>' +
+          '<div class="goal">' + r.goal + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="rbody">' +
+        '<div class="fields">' +
+          '<label class="f">landed as<input class="t u" value="' + esc(s.user) + '" placeholder="root, www-data..."></label>' +
+        '</div>' +
+        '<label class="f">why did this service let you in?' +
+          '<textarea class="t w" placeholder="One sentence. The mechanism, not the symptom.">' + esc(s.why) + '</textarea></label>' +
+        '<div class="hints">' +
+          r.hints.map((t,i) =>
+            '<div class="hint' + (s.hints.includes(i) ? " shown" : "") + '">' +
+              '<button class="hbtn">Hint ' + (i===0?"A":"B") + '</button>' +
+              '<div class="htext">' + t + '</div>' +
+            '</div>').join("") +
+        '</div>' +
+      '</div>';
+
+    const chk = el.querySelector(".chk");
+    chk.addEventListener("change", () => {
+      s.done = chk.checked; el.classList.toggle("done", chk.checked); save(); tally();
+    });
+    el.querySelector(".toggle").addEventListener("click", () => el.classList.toggle("open"));
+    el.querySelector(".u").addEventListener("input", e => { s.user = e.target.value; save(); });
+    el.querySelector(".w").addEventListener("input", e => { s.why = e.target.value; save(); });
+    el.querySelectorAll(".hint").forEach((hn, i) => {
+      hn.querySelector(".hbtn").addEventListener("click", () => {
+        hn.classList.add("shown");
+        if (!s.hints.includes(i)) { s.hints.push(i); save(); }
+      });
+    });
+    board.appendChild(el);
+  });
+});
+
+function esc(x){ return String(x||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+document.getElementById("tot").textContent = total;
+function tally(){
+  let n = 0;
+  TIERS.forEach(t => t.routes.forEach(r => { if (!r.noshell && state[r.id] && state[r.id].done) n++; }));
+  document.getElementById("n").textContent = n;
+  document.getElementById("pb").style.width = (total ? (n/total*100) : 0) + "%";
+}
+tally();
+
+document.getElementById("expand").addEventListener("click", () => {
+  const any = document.querySelector(".route:not(.open)");
+  document.querySelectorAll(".route").forEach(el => el.classList.toggle("open", !!any));
+});
+
+document.getElementById("export").addEventListener("click", () => {
+  const lines = ["Metasploitable board - my notes", ""];
+  let n = 0, hints = 0;
+  TIERS.forEach(t => {
+    lines.push("== " + t.name + " ==");
+    t.routes.forEach(r => {
+      const s = st(r.id);
+      hints += s.hints.length;
+      if (s.done && !r.noshell) n++;
+      lines.push(
+        (s.done ? "[x] " : "[ ] ") + r.id + "  port " + r.port + "  " + r.svc +
+        "\n      landed as: " + (s.user || "-") +
+        "\n      why:       " + (s.why || "-"));
+    });
+    lines.push("");
+  });
+  lines.push("Shells: " + n + " of " + total + ".  Hints used: " + hints + ".");
+  const out = document.getElementById("out");
+  out.value = lines.join("\n");
+  out.style.display = "block";
+  out.select();
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  if (!confirm("Clear all your progress on this machine?")) return;
+  try { localStorage.removeItem(KEY); } catch(e){}
+  location.reload();
+});
+</script>
+</body>
+</html>
