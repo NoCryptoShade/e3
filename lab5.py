@@ -37,8 +37,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
 SERVER_BANNER = "gokstad-lab/1.0"
-JWT_SECRET = b"lab5-signing-key"
+JWT_SECRET = b"letmein"          # chosen badly on purpose. See round 3.
 LOG_PATH = "lab5_access.log"
+
+FLAG_SESSION = "GKA{session_ids_must_not_be_guessable}"
+FLAG_ADMIN = "GKA{a_signature_is_only_as_good_as_its_key}"
 
 # ---------------------------------------------------------------------------
 # State. All in memory, so restarting the process resets everything.
@@ -66,6 +69,7 @@ USERS = {
         "internal_note": "escalated complaint 2026-03, handle carefully",
         "password_reset_token": "prt_be14d0f8",
         "flagged_for_review": True,
+        "note_to_self": FLAG_SESSION,
     },
     "drift": {
         "password": "Sommer2026!",
@@ -108,6 +112,24 @@ _log_lock = threading.Lock()
 RATE_WINDOW = 10.0
 RATE_LIMIT_GENERAL = 200
 RATE_LIMIT_LOGIN = 25
+
+
+def victim_traffic():
+    """Kari logs in every few seconds, the way a real user would.
+
+    Her session id comes from the same predictable generator as everyone
+    else's. That is the point of round 2: a student who works out the
+    pattern can reach a session that is not theirs without touching her
+    password.
+    """
+    while True:
+        sid = next_session_id()
+        _sessions[sid] = "kari"
+        # keep the store from growing without bound, oldest first
+        if len(_sessions) > 400:
+            for old in list(_sessions)[:100]:
+                _sessions.pop(old, None)
+        time.sleep(12)
 
 
 def next_session_id():
@@ -507,7 +529,10 @@ def h_account(rq, m, q, host):
                         "<div class='row'><span>Navn</span><span>{0}</span></div>"
                         "<div class='row'><span>E-post</span><span>{1}</span></div>"
                         "<div class='row'><span>Kundenummer</span><span>{2}</span></div>"
-                        "</div>").format(u["name"], u["email"], u["customer_id"])
+                        "{3}</div>").format(
+                            u["name"], u["email"], u["customer_id"],
+                            "<div class='row'><span>Notat</span><span>{0}</span></div>".format(
+                                u["note_to_self"]) if u.get("note_to_self") else "")
     if not username:
         # The redirect is issued, but the body was rendered first and is sent anyway.
         hidden = page("Min side",
@@ -611,7 +636,12 @@ def h_api_admin(rq, m, q, host):
         rq.send_json(403, {"error": "role 'admin' required, token carries '{0}'".format(
             payload.get("role"))})
         return
-    rq.send_json(200, {"users": list(USERS)})
+    rq.send_json(200, {
+        "flag": FLAG_ADMIN,
+        "users": [{"username": k, "role": v["role"], "email": v["email"],
+                   "password_reset_token": v["password_reset_token"]}
+                  for k, v in USERS.items()],
+    })
 
 
 def h_slow(rq, m, q, host):
@@ -697,6 +727,7 @@ def main():
     if args.expose:
         print("WARNING: bound to all interfaces. This application is "
               "vulnerable by design.")
+    threading.Thread(target=victim_traffic, daemon=True).start()
     print("stop with Ctrl-C")
     try:
         httpd.serve_forever()
