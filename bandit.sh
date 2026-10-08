@@ -368,14 +368,24 @@ pkill -f "bandit-agent" 2>/dev/null || true
 setsid bash -c "exec -a 'bandit-agent ${P[10]}' sleep 999999" >/dev/null 2>&1 &
 disown 2>/dev/null || true
 
-# --- andreaars nivaa 11: legg P12 i root sin fil hvis sudo er tilgjengelig ---
+# --- andreaars nivaa 11: legg P12 i root sin fil ---
+# Trenger root for aa skrive i /root. sudo leser passordet fra terminalen (ikke
+# fra pipen), saa dette virker baade med og uten passordloes sudo. Vi prøver
+# foerst stille (passordloes); hvis det ikke gaar, spoer vi om sudo-passordet.
+SUDO_MERK=""
 if sudo -n true 2>/dev/null; then
-  echo "Passord til nivaa 12:  ${P[12]}" | sudo tee /root/niva12_passord.txt >/dev/null
-  sudo chmod 600 /root/niva12_passord.txt
-  SUDO_MERK="andreaars nivaa 11 (sudo) er klart"
+  echo "Passord til nivaa 12:  ${P[12]}" | sudo -n tee /root/niva12_passord.txt >/dev/null 2>&1 \
+    && sudo -n chmod 600 /root/niva12_passord.txt 2>/dev/null \
+    && SUDO_MERK="andreaars nivaa 11 (sudo) er klart"
 else
-  SUDO_MERK="MERK: sudo uten passord ikke tilgjengelig - nivaa 11 (sudo) kan ikke fullfoeres paa denne maskinen"
+  echo
+  echo ">> Setter opp andreaars-nivaa 11 (sudo). Skriv sudo-passordet ditt hvis du blir bedt om det."
+  if echo "Passord til nivaa 12:  ${P[12]}" | sudo tee /root/niva12_passord.txt >/dev/null 2>&1; then
+    sudo chmod 600 /root/niva12_passord.txt 2>/dev/null
+    SUDO_MERK="andreaars nivaa 11 (sudo) er klart"
+  fi
 fi
+[ -z "$SUDO_MERK" ] && SUDO_MERK="MERK: fikk ikke satt opp nivaa 11 (ingen sudo). Kjoer fiks12.sh naar du naar dit: curl -sO https://nocryptoshade.github.io/e3/fiks12.sh && bash fiks12.sh"
 
 # =====================================================================
 # apne.sh  -  laaser opp neste nivaa
