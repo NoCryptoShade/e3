@@ -261,7 +261,8 @@ Du eier fila, saa du kan gi deg selv lesetilgang:  chmod +r laast.txt
 Les den deretter.
 EOF
 echo "Passord til nivaa 7:  ${P[7]}" > "$STAG/niva6/laast.txt"
-chmod 000 "$STAG/niva6/laast.txt"
+# Merk: vi laaser IKKE fila her. En 000-fil kan ikke leses av tar for en vanlig
+# bruker, saa den ville falt ut av pakken. apne.sh setter 000 etter utpakking.
 
 # =====================================================================
 # niva7:  zcat (pakket logg)   -> P8
@@ -402,6 +403,8 @@ if openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -k "$pw" -in "$enc" 2>/dev/nul
   rm -rf "$BASE/niva$next"
   mv "$tmp/niva$next" "$BASE/niva$next"
   rm -rf "$tmp"
+  # nivaa 6: laas laast.txt saa studenten maa bruke chmod for aa lese den
+  [ -f "$BASE/niva$next/laast.txt" ] && chmod 000 "$BASE/niva$next/laast.txt" 2>/dev/null
   echo
   echo "Riktig! Nivaa $next er aapnet."
   echo "Gaa dit:   cd ~/bandit/niva$next   og les README.txt"
