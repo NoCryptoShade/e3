@@ -53,9 +53,85 @@ Her inne er det ingenting gjemt og ingenting laast for aa lure deg. Dette er
 bare en liten oevingsmappe der du faar proeve hver kommando en gang, saa de
 sitter i fingrene foer CTF-en.
 
-Foelg oppgavearket, en kommando om gangen. Laereren gaar gjennom paa storskjerm,
-du proever paa din egen maskin.
+Hele oppgaven ligger i OPPGAVE.txt. Les den slik:
+   cat OPPGAVE.txt
+Ta en kommando om gangen. Laereren gaar gjennom paa storskjerm.
+EOF
+
+cat > "$O/OPPGAVE.txt" <<'EOF'
+=====================================================================
+ OPPVARMING - de ni kommandoene du trenger i CTF-en
+=====================================================================
+Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
+
+
+0. FINN DEG TIL RETTE
+   Hvor er jeg, og hva ligger her?
+      pwd
+      ls
+
+
+1. cat - LES EN FIL
+   cat skriver ut hele innholdet i en fil.
+      cat velkommen.txt
+
+
+2. ls -a - SE DE SKJULTE FILENE
+   Filer som starter med punktum er skjult for vanlig ls. -a viser alt.
+      ls
+      ls -a
+      cat .notat
+
+
+3. grep - FINN EN LINJE I MENGDEN
+   grep skriver ut bare linjene som inneholder teksten du leter etter.
+      grep "FEIL" sys.log
+
+
+4. find - LET ETTER EN FIL
+   find leter gjennom mapper og undermapper. -name soeker paa navn.
+      find mappe -name "*.txt"
+
+
+5. tail og head - SLUTT ELLER START
+   tail viser de siste linjene, head de foerste.
+      tail lang.txt
+      head lang.txt
+
+
+6. base64 - AVKOD
+   base64 er en maate aa skrive om data paa. Ikke kryptering - alle kan avkode.
+      cat kode.txt
+      base64 -d kode.txt
+
+
+7. chmod - GI DEG SELV TILGANG
+   En fil har rettigheter for hvem som kan lese den. ls -l viser dem,
+   chmod endrer dem. Du eier fila, saa du har lov til aa gi deg selv tilgang.
+      ls -l stengt.txt
+      cat stengt.txt
+      chmod +r stengt.txt
+      cat stengt.txt
+
+
+8. zcat - LES EN PAKKET FIL
+   zcat leser en .gz-fil direkte, uten aa pakke den ut paa disk.
+      zcat gammel.log.gz
+
+
+9. sort og uniq - RYDD I LINJER
+   sort stokker linjene i rekkefoelge saa like havner ved siden av hverandre.
+   uniq -c teller, uniq -u viser bare de som finnes en gang.
+      sort frukt.txt
+      sort frukt.txt | uniq -c
+      sort frukt.txt | uniq -u
+
+
+=====================================================================
+ Det var verktoeykassa: cat, ls -a, grep, find, tail, base64, chmod,
+ zcat og sort|uniq. Det er noeyaktig det du trenger i CTF-en.
+=====================================================================
 EOF
 
 echo "Oppvarming klar i: $O"
-echo "Start med:  cd ~/oppvarming  &&  cat START.txt"
+echo "Start med:  cd ~/oppvarming  &&  cat OPPGAVE.txt"
