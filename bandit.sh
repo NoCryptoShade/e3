@@ -1,8 +1,9 @@
 #!/bin/bash
-# bandit.sh  -  bygger en lokal Bandit-stil flaggjakt paa en Kali.
-# Ti nivaa (0-9). Hvert nivaa laerer en Linux-ferdighet. Passordet du finner
-# paa et nivaa laaser opp det neste (ekte kryptering med openssl).
-# Passordene er TILFELDIGE per maskin, saa ingen kan rope ut svaret.
+# bandit.sh  -  bygger en lokal Bandit-stil CTF paa en Kali.
+# 26 nivaa (0-25). Hvert nivaa har ET fast flagg (GA{...}) du samler paa,
+# OG et eget tilfeldig passord som laaser opp neste nivaa (ekte kryptering
+# med openssl). Passordene er TILFELDIGE per maskin, saa ingen kan rope ut
+# svaret. Hvert nivaa krever minst to kommandoer for aa finne svaret.
 #
 # Kjoeres av HVER student paa egen maskin, som vanlig bruker.
 # Trenger ikke internett, ikke victim-VM. Alt ligger i ~/bandit/.
@@ -17,13 +18,43 @@ STAG="$(mktemp -d)"
 CAND="$(mktemp)"
 trap 'rm -rf "$STAG" "$CAND"' EXIT
 
-# --- lag tilfeldige passord (P1..P12) ---
+NIVA_MAX=25
+
+# --- faste flagg (like paa alle maskiner, til aa samle paa) ---
+declare -A FLAG
+FLAG[0]="GA{forste_steg}"
+FLAG[1]="GA{skjult_og_kodet}"
+FLAG[2]="GA{grep_sa_avkod}"
+FLAG[3]="GA{find_fant_det}"
+FLAG[4]="GA{rett_linje}"
+FLAG[5]="GA{bakvendt}"
+FLAG[6]="GA{apnet_selv}"
+FLAG[7]="GA{pakket_og_sokt}"
+FLAG[8]="GA{den_unike}"
+FLAG[9]="GA{forskjellen}"
+FLAG[10]="GA{rotert}"
+FLAG[11]="GA{hex_tilbake}"
+FLAG[12]="GA{strenger}"
+FLAG[13]="GA{i_minnet}"
+FLAG[14]="GA{etterlatt_spor}"
+FLAG[15]="GA{stakk_seg_ut}"
+FLAG[16]="GA{ikke_base64}"
+FLAG[17]="GA{hash_knekt}"
+FLAG[18]="GA{zip_apnet}"
+FLAG[19]="GA{riktig_type}"
+FLAG[20]="GA{dekryptert}"
+FLAG[21]="GA{bak_bildet}"
+FLAG[22]="GA{grav_dypt}"
+FLAG[23]="GA{rett_kolonne}"
+FLAG[24]="GA{root_tilgang}"
+FLAG[25]="GA{bandit_mester}"
+
+# --- tilfeldige passord P1..P25 ---
 pw() { tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 16; }
 declare -a P
-for i in 1 2 3 4 5 6 7 8 9 10 12; do P[$i]="$(pw)"; done
+for i in $(seq 1 "$NIVA_MAX"); do P[$i]="$(pw)"; done
 
-# --- nivaa 11: SVAKT passord valgt tilfeldig fra rockyou-topp (eller reserve) ---
-# Bruker ekte rockyou-topp 500 hvis den finnes paa maskinen (Kali).
+# --- svak-passord-liste (rockyou-topp hvis finnes, ellers reserve) ---
 ROCKYOU=""
 for r in /usr/share/wordlists/rockyou.txt /usr/share/wordlists/rockyou.txt.gz; do
   [ -f "$r" ] && ROCKYOU="$r" && break
@@ -34,30 +65,22 @@ if [ -n "$ROCKYOU" ]; then
     *)    cat  "$ROCKYOU" ;;
   esac | grep -aE '^[A-Za-z0-9]{4,16}$' | head -500 > "$CAND"
 fi
-# reserve hvis rockyou mangler eller ga for faa brukbare linjer
 if [ "$(wc -l < "$CAND")" -lt 50 ]; then
 cat > "$CAND" <<'ORD'
 123456
-12345
-123456789
 password
 iloveyou
 princess
-1234567
 rockyou
-12345678
 abc123
 nicole
 daniel
 babygirl
 monkey
-lovely
 jessica
-654321
 michael
 ashley
 qwerty
-111111
 iloveu
 michelle
 tigger
@@ -74,7 +97,6 @@ jordan
 liverpool
 justin
 loveme
-123123
 football
 secret
 andrea
@@ -82,7 +104,6 @@ carlos
 jennifer
 joshua
 bubbles
-1234567890
 superman
 hannah
 amanda
@@ -102,14 +123,10 @@ charlie
 samantha
 barbie
 chelsea
-lovers
-teamo
 jasmine
 brandon
-666666
 shadow
 melissa
-eminem
 matthew
 robert
 danielle
@@ -123,7 +140,6 @@ vanessa
 cookie
 naruto
 summer
-sweety
 spongebob
 joseph
 junior
@@ -133,21 +149,17 @@ yellow
 daniela
 lauren
 mickey
-princesa
 alexandra
 alexis
 jesus
-estrella
 miguel
 william
 thomas
-gabriel
 sophie
 peanut
 bailey
 cheese
 snoopy
-qwertyuiop
 hunter
 martin
 startrek
@@ -158,234 +170,468 @@ stavanger
 ORD
 fi
 
-P[11]="$(shuf -n1 "$CAND")"
+# --- svake passord til knekk-nivaa (garantert i ordlista) ---
+P[18]="$(shuf -n1 "$CAND")"                                            # niva17 -> sha512crypt
+while :; do P[20]="$(shuf -n1 "$CAND")"; [ "${P[20]}" != "${P[18]}" ] && break; done   # niva19 -> md5
+while :; do ZIPPW="$(shuf -n1 "$CAND")"; [ "$ZIPPW" != "${P[18]}" ] && [ "$ZIPPW" != "${P[20]}" ] && break; done  # niva18 -> zip
 
-mkdir -p "$STAG"/niva{0,1,2,3,4,5,6,7,8,9,10,11,12}
-# marker saa apne.sh kan se at dekryptering lyktes
-for i in 0 1 2 3 4 5 6 7 8 9 10 11 12; do echo "niva$i" > "$STAG/niva$i/.ok"; done
+# b64 uten linjeskift (portabelt)
+b64() { base64 | tr -d '\n'; }
+b32() { base32 | tr -d '\n'; }
+
+mkdir -p "$STAG"
+for i in $(seq 0 "$NIVA_MAX"); do mkdir -p "$STAG/niva$i"; echo "niva$i" > "$STAG/niva$i/.ok"; done
+
+# reveal-linjer: flagg + passord til neste nivaa
+reveal() {  # $1 = nivaa N -> skriver to linjer
+  echo "Flagg: ${FLAG[$1]}"
+  echo "Passord til nivaa $(( $1 + 1 )):  ${P[$(( $1 + 1 ))]}"
+}
 
 # =====================================================================
-# niva0  (aapent):  cat        -> P1
+# niva0  (aapent):  cat + cat
 # =====================================================================
-cat > "$STAG/niva0/README.txt" <<EOF
-BANDIT-JAKT - nivaa 0
-=====================
-Velkommen. Det er tretten nivaa (0 til 12). Nivaa 0 til 8 er for alle.
-Nivaa 9 til 12 er ekstra andreaars-nivaa, for de raske.
-Paa hvert nivaa finner du et passord. Passordet laaser opp neste nivaa.
+cat > "$STAG/niva0/README.txt" <<'EOF'
+BANDIT-CTF - nivaa 0
+====================
+Velkommen. Det er 26 nivaa (0 til 25). Nivaa 0 til 11 er for alle.
+Nivaa 12 til 24 er ekstra andreaars-nivaa for de raske. Nivaa 25 er maal.
+
+Paa hvert nivaa finner du to ting:
+  - ET FLAGG paa formen  GA{...}   (samle dem, de er like for alle)
+  - ET PASSORD til neste nivaa     (tilfeldig paa din maskin)
+
 Slik gaar du videre:
-
-  1. Finn passordet paa nivaaet du staar paa.
+  1. Loes nivaaet (hvert nivaa trenger minst to kommandoer).
   2. Kjoer:   bash ~/bandit/apne.sh
   3. Skriv inn passordet. Da aapnes neste nivaa i ~/bandit/nivaN/.
 
-Hvert nivaa laerer deg en Linux-ferdighet. README paa nivaaet sier hvilken.
+Hvert nivaa laerer deg en ferdighet. README paa nivaaet sier hvilken.
 
-Du klarte nivaa 0 ved aa lese denne fila med cat.
-Passord til nivaa 1:  ${P[1]}
+Du loeste nivaa 0 ved aa lese denne fila. Flagget og passordet til nivaa 1
+ligger nederst i velkomst.txt. Les den:
+   cat velkomst.txt
 EOF
+{ echo "Hei og velkommen til CTF-en."; echo "Les rolig, ta en kommando om gangen."; echo; reveal 0; } > "$STAG/niva0/velkomst.txt"
 
 # =====================================================================
-# niva1:  ls -a (skjult fil)   -> P2
+# niva1:  ls -a + base64 -d
 # =====================================================================
 cat > "$STAG/niva1/README.txt" <<'EOF'
-NIVAA 1 - skjulte filer
-=======================
-Passordet til neste nivaa ligger i en SKJULT fil i denne mappen.
-Filer som starter med punktum vises ikke med vanlig ls. Bruk  ls -a
-Les deretter den skjulte fila.
+NIVAA 1 - skjult og kodet
+=========================
+Svaret ligger i en SKJULT fil (starter med punktum), og den er i tillegg
+base64-kodet. To steg:
+   ls -a
+   base64 -d .skjult
 EOF
-echo "Passord til nivaa 2:  ${P[2]}" > "$STAG/niva1/.passord"
+reveal 1 | b64 > "$STAG/niva1/.skjult"
 
 # =====================================================================
-# niva2:  grep (logg)          -> P3
+# niva2:  grep + base64 -d
 # =====================================================================
 cat > "$STAG/niva2/README.txt" <<'EOF'
-NIVAA 2 - let i loggen med grep
-===============================
-Passordet staar paa EN linje i system.log, merket med PASSORD=.
-Fila har over 2000 linjer. Bla ikke - bruk  grep "PASSORD=" system.log
+NIVAA 2 - grep saa avkod
+========================
+EN linje i system.log er merket KODET= og er base64. Finn den, avkod den:
+   grep KODET system.log
+   grep KODET system.log | sed 's/.*KODET=//' | base64 -d
 EOF
 {
   for i in $(seq 1 1500); do echo "okt 08 10:$((RANDOM%60)):$((RANDOM%60)) srv tjeneste[$RANDOM]: rutine ok"; done
-  echo "okt 08 02:17:44 srv auth: PASSORD=${P[3]}"
+  echo "okt 08 02:17:44 srv auth: KODET=$(reveal 2 | b64)"
   for i in $(seq 1 600); do echo "okt 08 11:$((RANDOM%60)):$((RANDOM%60)) srv tjeneste[$RANDOM]: rutine ok"; done
 } > "$STAG/niva2/system.log"
 
 # =====================================================================
-# niva3:  find (.conf)         -> P4
+# niva3:  find + cat
 # =====================================================================
 cat > "$STAG/niva3/README.txt" <<'EOF'
-NIVAA 3 - finn fila med find
-============================
-Under mappen data/ ligger mange filer. Nesten alle er stoey.
-Noeyaktig EN fil slutter paa .conf. Passordet staar i den.
-Bruk  find data -name "*.conf"  og les fila den finner.
+NIVAA 3 - finn og les
+=====================
+Under data/ ligger mange filer. Noeyaktig EN slutter paa .conf. Finn den, les den:
+   find data -name "*.conf"
+   cat <stien find gir deg>
 EOF
-mkdir -p "$STAG/niva3/data/a/b" "$STAG/niva3/data/c"
-for d in data data/a data/a/b data/c; do
+mkdir -p "$STAG/niva3/data/a/b" "$STAG/niva3/data/c/d"
+for d in data data/a data/a/b data/c data/c/d; do
   for n in 1 2 3 4 5; do echo "stoey" > "$STAG/niva3/$d/fil_$RANDOM.txt"; done
 done
-echo "Passord til nivaa 4:  ${P[4]}" > "$STAG/niva3/data/a/b/drift.conf"
+reveal 3 > "$STAG/niva3/data/a/b/drift.conf"
 
 # =====================================================================
-# niva4:  tail (slutten)       -> P5
+# niva4:  head + tail (to bestemte linjer)
 # =====================================================================
 cat > "$STAG/niva4/README.txt" <<'EOF'
-NIVAA 4 - siste linje med tail
-==============================
-Passordet staar paa den ALLER SISTE linjen i lang.txt (600 linjer).
-Bruk  tail lang.txt
+NIVAA 4 - rett linje
+====================
+lang.txt har 800 linjer. Flagget staar paa linje 300, passordet paa linje 650.
+Hent en bestemt linje ved aa kombinere head og tail:
+   head -n 300 lang.txt | tail -n 1
+   head -n 650 lang.txt | tail -n 1
 EOF
-{ for i in $(seq 1 599); do echo "linje $i - ikke her"; done; echo "Passord til nivaa 5:  ${P[5]}"; } > "$STAG/niva4/lang.txt"
+{
+  for i in $(seq 1 299); do echo "linje $i - ikke her"; done
+  echo "Flagg: ${FLAG[4]}"
+  for i in $(seq 301 649); do echo "linje $i - ikke her"; done
+  echo "Passord til nivaa 5:  ${P[5]}"
+  for i in $(seq 651 800); do echo "linje $i - ikke her"; done
+} > "$STAG/niva4/lang.txt"
 
 # =====================================================================
-# niva5:  base64 -d            -> P6
+# niva5:  rev + base64 -d
 # =====================================================================
 cat > "$STAG/niva5/README.txt" <<'EOF'
-NIVAA 5 - avkod base64
-======================
-kodet.txt er ikke kryptert, bare kodet med base64. Hvem som helst kan avkode.
-Bruk  base64 -d kodet.txt
+NIVAA 5 - bakvendt
+==================
+kodet.txt er foerst base64-kodet og deretter skrevet BAKLENGS. Snu og avkod:
+   rev kodet.txt
+   rev kodet.txt | base64 -d
 EOF
-echo "Passord til nivaa 6:  ${P[6]}" | base64 > "$STAG/niva5/kodet.txt"
+reveal 5 | b64 | rev > "$STAG/niva5/kodet.txt"
 
 # =====================================================================
-# niva6:  chmod (rettigheter)  -> P7
+# niva6:  chmod + cat   (laases i apne.sh etter utpakking)
 # =====================================================================
 cat > "$STAG/niva6/README.txt" <<'EOF'
-NIVAA 6 - rettigheter med chmod
-===============================
-Du har ikke lesetilgang til laast.txt ennaa. Se rettighetene med  ls -l
-Du eier fila, saa du kan gi deg selv lesetilgang:  chmod +r laast.txt
-Les den deretter.
+NIVAA 6 - aapne selv
+====================
+Du har ikke lesetilgang til laast.txt ennaa. Se rettighetene, gi deg selv
+tilgang (du eier fila), og les:
+   ls -l laast.txt
+   chmod +r laast.txt
+   cat laast.txt
 EOF
-echo "Passord til nivaa 7:  ${P[7]}" > "$STAG/niva6/laast.txt"
-# Merk: vi laaser IKKE fila her. En 000-fil kan ikke leses av tar for en vanlig
-# bruker, saa den ville falt ut av pakken. apne.sh setter 000 etter utpakking.
+reveal 6 > "$STAG/niva6/laast.txt"
 
 # =====================================================================
-# niva7:  zcat (pakket logg)   -> P8
+# niva7:  zcat + grep
 # =====================================================================
 cat > "$STAG/niva7/README.txt" <<'EOF'
-NIVAA 7 - pakket fil med zcat
-=============================
-Logg-arkivet arkiv.log.gz er pakket (gzip). Du trenger ikke pakke det ut paa disk.
-Les det direkte med  zcat arkiv.log.gz   (eller  zgrep PASSORD arkiv.log.gz )
+NIVAA 7 - pakket og soekt
+=========================
+arkiv.log.gz er pakket (gzip). Les det direkte og finn linjene med svaret:
+   zcat arkiv.log.gz | grep -A1 Flagg
 EOF
-{ for i in $(seq 1 300); do echo "arkivlinje $i"; done; echo "PASSORD=${P[8]}"; } | gzip > "$STAG/niva7/arkiv.log.gz"
+{ for i in $(seq 1 300); do echo "arkivlinje $i rutine ok"; done; reveal 7; } | gzip > "$STAG/niva7/arkiv.log.gz"
 
 # =====================================================================
-# niva8:  sort | uniq -u       -> P9
+# niva8:  sort | uniq -u + base64 -d
 # =====================================================================
 cat > "$STAG/niva8/README.txt" <<'EOF'
-NIVAA 8 - den unike linjen (sort og uniq)
-=========================================
-I linjer.txt staar hver linje to ganger - bortsett fra EN som staar bare en gang.
-Den ene unike linjen er passordet.
-Bruk  sort linjer.txt | uniq -u
+NIVAA 8 - den unike
+===================
+I linjer.txt staar hver linje to ganger - bortsett fra EN. Den unike linja er
+base64. Finn den og avkod:
+   sort linjer.txt | uniq -u
+   sort linjer.txt | uniq -u | base64 -d
 EOF
 {
   for i in $(seq 1 200); do echo "duplikatlinje-$i"; echo "duplikatlinje-$i"; done
-  echo "PASSORD=${P[9]}"
-} > "$STAG/niva8/linjer.txt.tmp"
-# bland linjene saa den unike ikke bare ligger sist
-shuf "$STAG/niva8/linjer.txt.tmp" > "$STAG/niva8/linjer.txt"
-rm "$STAG/niva8/linjer.txt.tmp"
+  reveal 8 | b64
+} | shuf > "$STAG/niva8/linjer.txt"
 
 # =====================================================================
-# niva9:  ps (prosess)         -> P10     ANDREAARS
-# Passordet ligger IKKE i en fil, men i en prosess som startes ved oppsett.
+# niva9:  diff + base64 -d
 # =====================================================================
 cat > "$STAG/niva9/README.txt" <<'EOF'
-NIVAA 9 - prosesser med ps  (andreaars)
-=======================================
-Fra her er det andreaars-nivaa. Samme verktoey, litt tyngre bruk.
-
-Passordet til neste nivaa ligger IKKE i en fil. Det ligger i en PROSESS som
-kjoerer akkurat naa. ps aux lister alle prosesser med hele kommandolinjen.
-Finn prosessen som heter bandit-agent:
-   ps aux | grep bandit-agent
-Passordet staar som en del av kommandolinjen.
+NIVAA 9 - forskjellen
+=====================
+a.txt og b.txt er nesten like. Noeyaktig EN linje skiller, og den er base64.
+Finn forskjellen og avkod den:
+   diff a.txt b.txt
+   diff a.txt b.txt | grep '^>' | sed 's/^> //' | base64 -d
 EOF
+for i in $(seq 1 400); do echo "felles linje $i"; done > "$STAG/niva9/a.txt"
+cp "$STAG/niva9/a.txt" "$STAG/niva9/b.txt"
+# bytt ut linje 200 i b.txt med base64 av reveal
+DIFFB64="$(reveal 9 | b64)"
+awk -v r="$DIFFB64" 'NR==200{print r; next} {print}' "$STAG/niva9/a.txt" > "$STAG/niva9/b.txt"
 
 # =====================================================================
-# niva10: john (knekk hash)    -> P11 (svakt passord i ordliste)   ANDREAARS
+# niva10:  tr (ROT13)
 # =====================================================================
 cat > "$STAG/niva10/README.txt" <<'EOF'
-NIVAA 10 - knekk hashen med john  (andreaars)
-=============================================
-I hash.txt ligger et passord lagret som en hash (sha512crypt). Du kan ikke lese
-det direkte. Men passordet er svakt og staar et sted i ordliste.txt. Knekk det:
-   john --wordlist=ordliste.txt hash.txt
-   john --show hash.txt
-Det knekte passordet aapner neste nivaa.
+NIVAA 10 - rotert
+=================
+rot13.txt er rotert med ROT13 (hver bokstav flyttet 13 plasser). Samme
+kommando ruller tilbake:
+   cat rot13.txt
+   cat rot13.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'
 EOF
-# tilfeldig salt (ikke fast), saa hashen ser ulik ut paa hver maskin
-HASH="$(openssl passwd -6 "${P[11]}")"
-echo "drift:${HASH}" > "$STAG/niva10/hash.txt"
-# ordlista studenten knekker mot = kandidatlista (inneholder det valgte passordet)
-cp "$CAND" "$STAG/niva10/ordliste.txt"
+reveal 10 | tr 'A-Za-z' 'N-ZA-Mn-za-m' > "$STAG/niva10/rot13.txt"
 
 # =====================================================================
-# niva11: sudo (root sin fil)  -> P12     ANDREAARS
-# Passordet legges i /root ved oppsett hvis sudo er tilgjengelig.
+# niva11:  xxd + base64 -d
 # =====================================================================
 cat > "$STAG/niva11/README.txt" <<'EOF'
-NIVAA 11 - bare root, med sudo  (andreaars)
-===========================================
-Det siste passordet ligger i /root/niva12_passord.txt. Bare root kan lese den.
-Hvis brukeren din har sudo, leser du den med:
-   sudo cat /root/niva12_passord.txt
-(Hvis sudo spoer om et passord du ikke har, si fra til veileder. Da stopper
-kjeden her paa denne maskinen, og du har uansett fullfoert det meste.)
+NIVAA 11 - hex tilbake
+======================
+hex.txt er ren hex. Gjoer den om til tekst - da faar du base64, som du avkoder:
+   xxd -r -p hex.txt
+   xxd -r -p hex.txt | base64 -d
 EOF
+reveal 11 | b64 | xxd -p > "$STAG/niva11/hex.txt"
 
 # =====================================================================
-# niva12: ferdig
+# niva12:  strings + grep   (ANDREAARS)
 # =====================================================================
 cat > "$STAG/niva12/README.txt" <<'EOF'
-NIVAA 12 - FERDIG
-=================
-Gratulerer! Du loeste hele kjeden, inkludert andreaars-nivaaene:
-cat, ls -a, grep, find, tail, base64, chmod, zcat, sort|uniq, ps, john og sudo.
+NIVAA 12 - strenger i stoey  (andreaars)
+========================================
+Fra her er det andreaars-nivaa. stoey.bin ser ut som soepel, men det ligger
+lesbar tekst inni. strings plukker ut det lesbare:
+   strings stoey.bin | grep -A1 Flagg
+EOF
+{ head -c 1500 /dev/urandom; echo; reveal 12; head -c 1500 /dev/urandom; echo; } > "$STAG/niva12/stoey.bin"
 
-Fullfoeringsflagg (skriv det paa tavla):  GA{bandit_mester}
+# =====================================================================
+# niva13:  ps + grep   (ANDREAARS) - svaret ligger i en prosess
+# =====================================================================
+cat > "$STAG/niva13/README.txt" <<'EOF'
+NIVAA 13 - i minnet  (andreaars)
+================================
+Svaret ligger IKKE i en fil. Det ligger i en PROSESS som kjoerer akkurat naa.
+ps lister prosesser med hele kommandolinjen. Bruk ww saa linja ikke avkortes:
+   ps auxww | grep bandit-agent
+Prosessen heter bandit-agent og baerer  flagg=GA{...}  og  passord=...
+i kommandolinjen (hopp over selve grep-linja, og ignorer tallet 999999 bakerst).
 EOF
 
 # =====================================================================
-# niva0 aapent, niva1..9 krypteres hver med passordet som aapner det
+# niva14:  ls -a + grep   (ANDREAARS) - spor i en historikkfil
+# =====================================================================
+cat > "$STAG/niva14/README.txt" <<'EOF'
+NIVAA 14 - etterlatt spor  (andreaars)
+======================================
+En bruker har vaert her og lagt igjen spor i en skjult historikkfil.
+Finn den skjulte fila, og grav ut linjene som betyr noe:
+   ls -a
+   grep -a -A1 Flagg .kommandohistorikk
+EOF
+{
+  echo "cd /var/www"
+  echo "ls -la"
+  echo "sudo systemctl status nginx"
+  echo "vim config.php"
+  echo "echo 'Flagg: ${FLAG[14]}'"
+  echo "echo 'Passord til nivaa 15:  ${P[15]}'"
+  echo "history -c"
+} > "$STAG/niva14/.kommandohistorikk"
+
+# =====================================================================
+# niva15:  find -size + cat   (ANDREAARS) - fila som stikker seg ut
+# =====================================================================
+cat > "$STAG/niva15/README.txt" <<'EOF'
+NIVAA 15 - stakk seg ut  (andreaars)
+====================================
+I lager/ ligger mange smaa filer og EN som er mye stoerre enn resten.
+Finn den store fila (over 9 kB) og les den:
+   find lager -size +9k -type f
+   cat <stien find gir deg>
+EOF
+mkdir -p "$STAG/niva15/lager/arkiv" "$STAG/niva15/lager/temp"
+for d in lager lager/arkiv lager/temp; do
+  for n in 1 2 3 4 5 6; do echo "liten loggfil uten noe spennende" > "$STAG/niva15/$d/logg_$RANDOM.txt"; done
+done
+{ reveal 15; head -c 11000 /dev/zero | tr '\0' 'x'; } > "$STAG/niva15/lager/arkiv/stor_dump.txt"
+
+# =====================================================================
+# niva16:  base32   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva16/README.txt" <<'EOF'
+NIVAA 16 - ikke base64  (andreaars)
+===================================
+kodet.txt ser ut som base64, men tegnsettet er bare A-Z og 2-7. Det er base32.
+Avkod med base32:
+   cat kodet.txt
+   cat kodet.txt | base32 -d
+EOF
+reveal 16 | b32 > "$STAG/niva16/kodet.txt"
+
+# =====================================================================
+# niva17:  john sha512crypt   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva17/README.txt" <<EOF
+NIVAA 17 - knekk hashen  (andreaars)
+====================================
+I hash.txt ligger passordet til neste nivaa lagret som en sha512crypt-hash.
+Passordet er svakt og staar i ordliste.txt. Knekk det med john:
+   john --wordlist=ordliste.txt hash.txt
+   john --show hash.txt
+Det knekte passordet aapner nivaa 18.
+
+Flagg: ${FLAG[17]}
+EOF
+HASH17="$(openssl passwd -6 "${P[18]}")"
+echo "drift:${HASH17}" > "$STAG/niva17/hash.txt"
+cp "$CAND" "$STAG/niva17/ordliste.txt"
+
+# =====================================================================
+# niva18:  zip2john + john + unzip   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva18/README.txt" <<EOF
+NIVAA 18 - knekk zip-en  (andreaars)
+====================================
+hemmelig.zip er passordbeskyttet. Trekk ut hashen, knekk passordet, og pakk ut:
+   zip2john hemmelig.zip > ziphash.txt
+   john --wordlist=ordliste.txt ziphash.txt
+   john --show ziphash.txt
+   unzip -P <passordet> hemmelig.zip
+Les deretter fila som laa inni.
+
+Flagg: ${FLAG[18]}
+EOF
+ZTMP="$(mktemp -d)"
+reveal 18 > "$ZTMP/inni.txt"
+( cd "$ZTMP" && zip -q -P "$ZIPPW" hemmelig.zip inni.txt )
+cp "$ZTMP/hemmelig.zip" "$STAG/niva18/hemmelig.zip"
+cp "$CAND" "$STAG/niva18/ordliste.txt"
+rm -rf "$ZTMP"
+
+# =====================================================================
+# niva19:  gjenkjenn hashtype + john (raw-md5)   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva19/README.txt" <<EOF
+NIVAA 19 - riktig type  (andreaars)
+===================================
+hash.txt inneholder EN hash, men hvilken type? Den er 32 tegn hex - det peker
+mot MD5. Si fra til john hvilken type det er:
+   john --format=raw-md5 --wordlist=ordliste.txt hash.txt
+   john --show --format=raw-md5 hash.txt
+(Tips: hashid hash.txt kan foresla typen hvis du er usikker.)
+
+Flagg: ${FLAG[19]}
+EOF
+MD5_19="$(printf '%s' "${P[20]}" | openssl dgst -md5 -r | cut -d' ' -f1)"
+echo "$MD5_19" > "$STAG/niva19/hash.txt"
+cp "$CAND" "$STAG/niva19/ordliste.txt"
+
+# =====================================================================
+# niva20:  base64 -d + openssl enc -d   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva20/README.txt" <<'EOF'
+NIVAA 20 - dekryptert  (andreaars)
+==================================
+blob.enc er kryptert med openssl (aes-256-cbc). Noekkelen ligger base64-kodet i
+hint.txt. Avkod noekkelen, og bruk den til aa dekryptere:
+   base64 -d hint.txt
+   openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -k "$(base64 -d hint.txt)" -in blob.enc
+EOF
+KEY20="$(pw)"
+printf '%s' "$KEY20" | b64 > "$STAG/niva20/hint.txt"
+reveal 20 | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -salt -k "$KEY20" -out "$STAG/niva20/blob.enc"
+
+# =====================================================================
+# niva21:  strings/tail -c   (ANDREAARS) - data bak et bilde
+# =====================================================================
+cat > "$STAG/niva21/README.txt" <<'EOF'
+NIVAA 21 - bak bildet  (andreaars)
+==================================
+bilde.png ser ut som et bilde, men noen har limt tekst BAK bildedataene.
+Plukk ut den lesbare teksten paa slutten:
+   strings bilde.png | grep -A1 Flagg
+   (alternativt:  tail -c 120 bilde.png )
+EOF
+# minimal PNG-signatur + litt bilde-stoey, saa reveal limt bak
+printf '\x89PNG\r\n\x1a\n' > "$STAG/niva21/bilde.png"
+head -c 800 /dev/urandom >> "$STAG/niva21/bilde.png"
+printf '\n' >> "$STAG/niva21/bilde.png"
+reveal 21 >> "$STAG/niva21/bilde.png"
+
+# =====================================================================
+# niva22:  grep -r + cut   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva22/README.txt" <<'EOF'
+NIVAA 22 - grav dypt  (andreaars)
+=================================
+Et helt mappetre med filer. Flagget staar i en av dem - let rekursivt. Passordet
+staar i en kolon-delt linje (felt nummer 4). -h gjoer at filnavnet ikke blir
+limt foran, saa kolonnene stemmer:
+   grep -r "Flagg" .
+   grep -rh "rolle:" . | cut -d: -f4
+EOF
+mkdir -p "$STAG/niva22/prosjekt/src/util" "$STAG/niva22/prosjekt/doc" "$STAG/niva22/prosjekt/conf"
+for d in prosjekt prosjekt/src prosjekt/src/util prosjekt/doc prosjekt/conf; do
+  for n in 1 2 3; do echo "vanlig innhold uten noe spennende" > "$STAG/niva22/$d/notat_$RANDOM.txt"; done
+done
+echo "Flagg: ${FLAG[22]}" > "$STAG/niva22/prosjekt/src/util/hjelp.txt"
+echo "rolle:drift:gruppe:${P[23]}:slutt" > "$STAG/niva22/prosjekt/conf/tilgang.cfg"
+
+# =====================================================================
+# niva23:  cut/awk paa passwd-lignende fil   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva23/README.txt" <<'EOF'
+NIVAA 23 - rett kolonne  (andreaars)
+====================================
+brukere.txt er paa /etc/passwd-format (felt delt med kolon). For brukeren
+"drift" ligger flagget i felt 5 og passordet i felt 7:
+   grep '^drift:' brukere.txt | cut -d: -f5
+   grep '^drift:' brukere.txt | cut -d: -f7
+EOF
+{
+  echo "root:x:0:0:root:/root:/bin/bash"
+  echo "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin"
+  echo "www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin"
+  echo "drift:x:1001:1001:${FLAG[23]}:/home/drift:${P[24]}"
+  echo "backup:x:34:34:backup:/var/backups:/usr/sbin/nologin"
+} > "$STAG/niva23/brukere.txt"
+
+# =====================================================================
+# niva24:  sudo (root sin fil)   (ANDREAARS)
+# =====================================================================
+cat > "$STAG/niva24/README.txt" <<'EOF'
+NIVAA 24 - root-tilgang  (andreaars)
+====================================
+Det siste passordet ligger i /root/niva25_passord.txt. Bare root kan lese den.
+Har brukeren din sudo, leser du den slik:
+   sudo cat /root/niva25_passord.txt
+(Hvis sudo spoer om et passord du ikke har, si fra til veileder.)
+EOF
+
+# =====================================================================
+# niva25: FERDIG
+# =====================================================================
+cat > "$STAG/niva25/README.txt" <<EOF
+NIVAA 25 - FERDIG
+=================
+Gratulerer! Du loeste hele kjeden, inkludert andreaars-nivaaene:
+cat, ls -a, grep, find, tail, base64, rev, tr, xxd, chmod, zcat, sort|uniq,
+diff, strings, ps, base32, john, zip2john, openssl og sudo.
+
+Fullfoeringsflagg:  ${FLAG[25]}
+EOF
+
+# =====================================================================
+# niva0 aapent, niva1..25 krypteres hver med passordet som aapner det
 # =====================================================================
 cp -r "$STAG/niva0" "$B/niva0"
-for N in 1 2 3 4 5 6 7 8 9 10 11 12; do
+for N in $(seq 1 "$NIVA_MAX"); do
   tar -czf - -C "$STAG" "niva$N" \
     | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -salt -k "${P[$N]}" \
       -out "$B/.laast/niva$N.enc"
 done
 
-# --- andreaars nivaa 9: start ps-prosessen som baerer passordet (P10) ---
+# --- niva13: start ps-prosessen som baerer flagg + passord (P14) ---
 pkill -f "bandit-agent" 2>/dev/null || true
-setsid bash -c "exec -a 'bandit-agent ${P[10]}' sleep 999999" >/dev/null 2>&1 &
+setsid bash -c "exec -a 'bandit-agent flagg=${FLAG[13]} passord=${P[14]}' sleep 999999" >/dev/null 2>&1 &
 disown 2>/dev/null || true
 
-# --- andreaars nivaa 11: legg P12 i root sin fil ---
-# Trenger root for aa skrive i /root. sudo leser passordet fra terminalen (ikke
-# fra pipen), saa dette virker baade med og uten passordloes sudo. Vi prøver
-# foerst stille (passordloes); hvis det ikke gaar, spoer vi om sudo-passordet.
+# --- niva24: legg flagg + P25 i root sin fil ---
 SUDO_MERK=""
 if sudo -n true 2>/dev/null; then
-  echo "Passord til nivaa 12:  ${P[12]}" | sudo -n tee /root/niva12_passord.txt >/dev/null 2>&1 \
-    && sudo -n chmod 600 /root/niva12_passord.txt 2>/dev/null \
-    && SUDO_MERK="andreaars nivaa 11 (sudo) er klart"
+  reveal 24 | sudo -n tee /root/niva25_passord.txt >/dev/null 2>&1 \
+    && sudo -n chmod 600 /root/niva25_passord.txt 2>/dev/null \
+    && SUDO_MERK="andreaars nivaa 24 (sudo) er klart"
 else
   echo
-  echo ">> Setter opp andreaars-nivaa 11 (sudo). Skriv sudo-passordet ditt hvis du blir bedt om det."
-  if echo "Passord til nivaa 12:  ${P[12]}" | sudo tee /root/niva12_passord.txt >/dev/null 2>&1; then
-    sudo chmod 600 /root/niva12_passord.txt 2>/dev/null
-    SUDO_MERK="andreaars nivaa 11 (sudo) er klart"
+  echo ">> Setter opp andreaars-nivaa 24 (sudo). Skriv sudo-passordet ditt hvis du blir bedt om det."
+  if reveal 24 | sudo tee /root/niva25_passord.txt >/dev/null 2>&1; then
+    sudo chmod 600 /root/niva25_passord.txt 2>/dev/null
+    SUDO_MERK="andreaars nivaa 24 (sudo) er klart"
   fi
 fi
-[ -z "$SUDO_MERK" ] && SUDO_MERK="MERK: fikk ikke satt opp nivaa 11 (ingen sudo). Kjoer fiks12.sh naar du naar dit: curl -sO https://nocryptoshade.github.io/e3/fiks12.sh && bash fiks12.sh"
+[ -z "$SUDO_MERK" ] && SUDO_MERK="MERK: fikk ikke satt opp nivaa 24 (ingen sudo). Kjoer fikssiste.sh naar du naar dit: curl -sO https://nocryptoshade.github.io/e3/fikssiste.sh && bash fikssiste.sh"
 
 # =====================================================================
 # apne.sh  -  laaser opp neste nivaa
@@ -394,7 +640,6 @@ cat > "$B/apne.sh" <<'GATE'
 #!/bin/bash
 # apne.sh - laaser opp neste nivaa med passordet du fant.
 BASE="$(cd "$(dirname "$0")" && pwd)"
-# finn hoeyeste aapnede nivaa
 cur=-1
 for d in "$BASE"/niva*; do
   [ -d "$d" ] || continue
@@ -428,7 +673,7 @@ GATE
 chmod +x "$B/apne.sh"
 
 echo
-echo "Bandit-jakt klar. Alt ligger i:  $B"
+echo "Bandit-CTF klar. Alt ligger i:  $B"
 echo "Start slik:"
 echo "   cd ~/bandit/niva0"
 echo "   cat README.txt"
