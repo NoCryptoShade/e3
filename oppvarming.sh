@@ -33,6 +33,15 @@ for i in $(seq 1 100); do echo "linje nummer $i"; done > "$O/lang.txt"
 # base64
 echo "Dette var kodet med base64." | base64 > "$O/kode.txt"
 
+# rev  (tekst skrevet baklengs)
+echo "Gratulerer, du leste en baklengs linje med rev." | rev > "$O/reversert.txt"
+
+# tr / ROT13  (hver bokstav flyttet 13 plasser)
+echo "Denne linja var rotert 13 plasser med ROT13." | tr 'A-Za-z' 'N-ZA-Mn-za-m' > "$O/rot13.txt"
+
+# xxd  (ren hex)
+echo "Dette laa gjemt som ren hex. xxd -r -p gir deg teksten." | xxd -p > "$O/hex.txt"
+
 # chmod  (fil uten lesetilgang - du eier den selv)
 echo "Naa fikk du lest meg etter at du ga deg selv tilgang." > "$O/stengt.txt"
 chmod 000 "$O/stengt.txt"
@@ -45,6 +54,10 @@ echo "Jeg laa pakket i en .gz-fil, men zcat leser meg direkte." | gzip > "$O/gam
   for i in 1 2 3; do echo "eple"; echo "banan"; echo "paere"; done
   echo "ananas"
 } > "$O/frukt.txt"
+
+# diff  (to nesten like filer, en linje skiller)
+{ echo "linje en"; echo "linje to"; echo "linje tre"; echo "linje fire"; } > "$O/diff_a.txt"
+{ echo "linje en"; echo "linje to"; echo "HER er forskjellen - det er denne diff viser deg"; echo "linje fire"; } > "$O/diff_b.txt"
 
 cat > "$O/START.txt" <<'EOF'
 OPPVARMING
@@ -60,7 +73,7 @@ EOF
 
 cat > "$O/OPPGAVE.txt" <<'EOF'
 =====================================================================
- OPPVARMING - de ni kommandoene du trenger i CTF-en
+ OPPVARMING - kommandoene du trenger i CTF-en
 =====================================================================
 Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
 
@@ -105,7 +118,26 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
       base64 -d kode.txt
 
 
-7. chmod - GI DEG SELV TILGANG
+7. rev - LES BAKLENGS
+   rev snur hver linje. En baklengs linje blir lesbar igjen.
+      cat reversert.txt
+      rev reversert.txt
+
+
+8. tr - ROT13
+   tr bytter ut tegn. ROT13 flytter hver bokstav 13 plasser. Kjoerer du
+   ROT13 to ganger er du tilbake til start, saa samme kommando avkoder.
+      cat rot13.txt
+      cat rot13.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'
+
+
+9. xxd - HEX
+   xxd -p viser data som ren hex. xxd -r -p gjoer hex om til tekst igjen.
+      cat hex.txt
+      xxd -r -p hex.txt
+
+
+10. chmod - GI DEG SELV TILGANG
    En fil har rettigheter for hvem som kan lese den. ls -l viser dem,
    chmod endrer dem. Du eier fila, saa du har lov til aa gi deg selv tilgang.
       ls -l stengt.txt
@@ -114,12 +146,12 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
       cat stengt.txt
 
 
-8. zcat - LES EN PAKKET FIL
+11. zcat - LES EN PAKKET FIL
    zcat leser en .gz-fil direkte, uten aa pakke den ut paa disk.
       zcat gammel.log.gz
 
 
-9. sort og uniq - RYDD I LINJER
+12. sort og uniq - RYDD I LINJER
    sort stokker linjene i rekkefoelge saa like havner ved siden av hverandre.
    uniq -c teller, uniq -u viser bare de som finnes en gang.
       sort frukt.txt
@@ -127,9 +159,14 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
       sort frukt.txt | uniq -u
 
 
+13. diff - FINN FORSKJELLEN
+   diff sammenligner to filer og viser bare linjene som er ulike.
+      diff diff_a.txt diff_b.txt
+
+
 =====================================================================
- Det var verktoeykassa: cat, ls -a, grep, find, tail, base64, chmod,
- zcat og sort|uniq. Det er noeyaktig det du trenger i CTF-en.
+ Det var verktoeykassa: cat, ls -a, grep, find, tail, base64, rev, tr,
+ xxd, chmod, zcat, sort|uniq og diff. Det er dette du trenger i CTF-en.
 =====================================================================
 EOF
 
