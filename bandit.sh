@@ -170,10 +170,12 @@ stavanger
 ORD
 fi
 
-# --- svake passord til knekk-nivaa (garantert i ordlista) ---
-P[18]="$(shuf -n1 "$CAND")"                                            # niva17 -> sha512crypt
-while :; do P[20]="$(shuf -n1 "$CAND")"; [ "${P[20]}" != "${P[18]}" ] && break; done   # niva19 -> md5
-while :; do ZIPPW="$(shuf -n1 "$CAND")"; [ "$ZIPPW" != "${P[18]}" ] && [ "$ZIPPW" != "${P[20]}" ] && break; done  # niva18 -> zip
+# --- svake ord til knekk-nivaaene (garantert i ordlista), alle forskjellige ---
+# Disse er KEYS som knekkes, ikke passordene videre. Passordene videre (P18,P20)
+# er tilfeldige og ligger kryptert i flagg.enc paa nivaaet.
+CRACK17="$(shuf -n1 "$CAND")"                                          # niva17 -> sha512crypt
+while :; do CRACK19="$(shuf -n1 "$CAND")"; [ "$CRACK19" != "$CRACK17" ] && break; done  # niva19 -> md5
+while :; do ZIPPW="$(shuf -n1 "$CAND")"; [ "$ZIPPW" != "$CRACK17" ] && [ "$ZIPPW" != "$CRACK19" ] && break; done  # niva18 -> zip
 
 # b64 uten linjeskift (portabelt)
 b64() { base64 | tr -d '\n'; }
@@ -440,19 +442,19 @@ reveal 16 | b32 > "$STAG/niva16/kodet.txt"
 # =====================================================================
 # niva17:  john sha512crypt   (ANDREAARS)
 # =====================================================================
-cat > "$STAG/niva17/README.txt" <<EOF
+cat > "$STAG/niva17/README.txt" <<'EOF'
 NIVAA 17 - knekk hashen  (andreaars)
 ====================================
-I hash.txt ligger passordet til neste nivaa som en sha512crypt-hash.
-Passordet er svakt og staar et sted i ordliste.txt.
-Hint: knekk hashen mot ordlista med et egnet verktoey. Det knekte passordet
-aapner nivaa 18.
-
-Flagg: ${FLAG[17]}
+hash.txt er et passord lagret som sha512crypt. Det er svakt og staar i
+ordliste.txt. Flagget og passordet til neste nivaa ligger kryptert i flagg.enc,
+laast med det samme ordet.
+Hint: knekk hashen mot ordlista, og bruk ordet til aa dekryptere flagg.enc
+(openssl, aes-256-cbc).
 EOF
-HASH17="$(openssl passwd -6 "${P[18]}")"
+HASH17="$(openssl passwd -6 "$CRACK17")"
 echo "drift:${HASH17}" > "$STAG/niva17/hash.txt"
 cp "$CAND" "$STAG/niva17/ordliste.txt"
+reveal 17 | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -salt -k "$CRACK17" -out "$STAG/niva17/flagg.enc"
 
 # =====================================================================
 # niva18:  zip2john + john + unzip   (ANDREAARS)
@@ -475,18 +477,19 @@ rm -rf "$ZTMP"
 # =====================================================================
 # niva19:  gjenkjenn hashtype + john (raw-md5)   (ANDREAARS)
 # =====================================================================
-cat > "$STAG/niva19/README.txt" <<EOF
+cat > "$STAG/niva19/README.txt" <<'EOF'
 NIVAA 19 - riktig type  (andreaars)
 ===================================
-hash.txt inneholder EN hash, men hvilken type? Lengden og tegnene avsloerer det.
-Hint: 32 tegn hex peker en bestemt vei. Kjenn igjen typen, og si fra til
-knekke-verktoeyet hvilket format det er. hashid kan foreslaa typen.
-
-Flagg: ${FLAG[19]}
+hash.txt inneholder EN hash. Hvilken type avsloerer lengden og tegnene.
+Flagget og passordet til neste nivaa ligger kryptert i flagg.enc, laast med
+det knekte ordet.
+Hint: 32 tegn hex peker en vei. Si fra til knekke-verktoeyet hvilket format
+det er, og bruk ordet til aa dekryptere flagg.enc. hashid kan foreslaa typen.
 EOF
-MD5_19="$(printf '%s' "${P[20]}" | openssl dgst -md5 -r | cut -d' ' -f1)"
+MD5_19="$(printf '%s' "$CRACK19" | openssl dgst -md5 -r | cut -d' ' -f1)"
 echo "$MD5_19" > "$STAG/niva19/hash.txt"
 cp "$CAND" "$STAG/niva19/ordliste.txt"
+reveal 19 | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -salt -k "$CRACK19" -out "$STAG/niva19/flagg.enc"
 
 # =====================================================================
 # niva20:  base64 -d + openssl enc -d   (ANDREAARS)
