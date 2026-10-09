@@ -1,9 +1,9 @@
 #!/bin/bash
-# oppvarming.sh  -  liten oevingsmappe for aa repetere Linux-kommandoene
-# foer CTF-en. Ingenting er laast eller gjemt - alt er synlig. Hensikten er
-# bare aa faa fingrene paa hver kommando en gang.
+# oppvarming.sh  -  liten øvingsmappe for å repetere Linux-kommandoene
+# før CTF-en. Ingenting er låst eller gjemt - alt er synlig. Hensikten er
+# bare å få fingrene på hver kommando en gang.
 #
-# Kjoeres av hver student paa egen maskin, som vanlig bruker.
+# Kjøres av hver student på egen maskin, som vanlig bruker.
 #   bash oppvarming.sh
 #   cd ~/oppvarming
 set -e
@@ -33,25 +33,25 @@ for i in $(seq 1 100); do echo "linje nummer $i"; done > "$O/lang.txt"
 # base64
 echo "Dette var kodet med base64." | base64 > "$O/kode.txt"
 
-# rev  (tekst skrevet baklengs)
+# rev  (tekst skrevet baklengs - ren ASCII, siden rev reverserer byte for byte)
 echo "Gratulerer, du leste en baklengs linje med rev." | rev > "$O/reversert.txt"
 
-# tr / ROT13  (hver bokstav flyttet 13 plasser)
+# tr / ROT13  (hver bokstav flyttet 13 plasser - ren ASCII)
 echo "Denne linja var rotert 13 plasser med ROT13." | tr 'A-Za-z' 'N-ZA-Mn-za-m' > "$O/rot13.txt"
 
 # xxd  (ren hex)
-echo "Dette laa gjemt som ren hex. xxd -r -p gir deg teksten." | xxd -p > "$O/hex.txt"
+echo "Dette lå gjemt som ren hex. xxd -r -p gir deg teksten." | xxd -p > "$O/hex.txt"
 
 # chmod  (fil uten lesetilgang - du eier den selv)
-echo "Naa fikk du lest meg etter at du ga deg selv tilgang." > "$O/stengt.txt"
+echo "Nå fikk du lest meg etter at du ga deg selv tilgang." > "$O/stengt.txt"
 chmod 000 "$O/stengt.txt"
 
 # zcat  (pakket fil)
-echo "Jeg laa pakket i en .gz-fil, men zcat leser meg direkte." | gzip > "$O/gammel.log.gz"
+echo "Jeg lå pakket i en .gz-fil, men zcat leser meg direkte." | gzip > "$O/gammel.log.gz"
 
-# sort | uniq  (mange like linjer, noen faa unike)
+# sort | uniq  (mange like linjer, noen få unike)
 {
-  for i in 1 2 3; do echo "eple"; echo "banan"; echo "paere"; done
+  for i in 1 2 3; do echo "eple"; echo "banan"; echo "pære"; done
   echo "ananas"
 } > "$O/frukt.txt"
 
@@ -62,20 +62,20 @@ echo "Jeg laa pakket i en .gz-fil, men zcat leser meg direkte." | gzip > "$O/gam
 cat > "$O/START.txt" <<'EOF'
 OPPVARMING
 ==========
-Her inne er det ingenting gjemt og ingenting laast for aa lure deg. Dette er
-bare en liten oevingsmappe der du faar proeve hver kommando en gang, saa de
-sitter i fingrene foer CTF-en.
+Her inne er det ingenting gjemt og ingenting låst for å lure deg. Dette er
+bare en liten øvingsmappe der du får prøve hver kommando en gang, så de
+sitter i fingrene før CTF-en.
 
 Hele oppgaven ligger i OPPGAVE.txt. Les den slik:
    cat OPPGAVE.txt
-Ta en kommando om gangen. Laereren gaar gjennom paa storskjerm.
+Ta en kommando om gangen. Læreren går gjennom på storskjerm.
 EOF
 
 cat > "$O/OPPGAVE.txt" <<'EOF'
 =====================================================================
  OPPVARMING - kommandoene du trenger i CTF-en
 =====================================================================
-Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
+Ta en kommando om gangen. Les hva den gjør, skriv den av, se hva som skjer.
 
 
 0. FINN DEG TIL RETTE
@@ -102,18 +102,18 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
 
 
 4. find - LET ETTER EN FIL
-   find leter gjennom mapper og undermapper. -name soeker paa navn.
+   find leter gjennom mapper og undermapper. -name søker på navn.
       find mappe -name "*.txt"
 
 
 5. tail og head - SLUTT ELLER START
-   tail viser de siste linjene, head de foerste.
+   tail viser de siste linjene, head de første.
       tail lang.txt
       head lang.txt
 
 
 6. base64 - AVKOD
-   base64 er en maate aa skrive om data paa. Ikke kryptering - alle kan avkode.
+   base64 er en måte å skrive om data på. Ikke kryptering - alle kan avkode.
       cat kode.txt
       base64 -d kode.txt
 
@@ -125,21 +125,21 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
 
 
 8. tr - ROT13
-   tr bytter ut tegn. ROT13 flytter hver bokstav 13 plasser. Kjoerer du
-   ROT13 to ganger er du tilbake til start, saa samme kommando avkoder.
+   tr bytter ut tegn. ROT13 flytter hver bokstav 13 plasser. Kjører du
+   ROT13 to ganger er du tilbake til start, så samme kommando avkoder.
       cat rot13.txt
       cat rot13.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'
 
 
 9. xxd - HEX
-   xxd -p viser data som ren hex. xxd -r -p gjoer hex om til tekst igjen.
+   xxd -p viser data som ren hex. xxd -r -p gjør hex om til tekst igjen.
       cat hex.txt
       xxd -r -p hex.txt
 
 
 10. chmod - GI DEG SELV TILGANG
    En fil har rettigheter for hvem som kan lese den. ls -l viser dem,
-   chmod endrer dem. Du eier fila, saa du har lov til aa gi deg selv tilgang.
+   chmod endrer dem. Du eier fila, så du har lov til å gi deg selv tilgang.
       ls -l stengt.txt
       cat stengt.txt
       chmod +r stengt.txt
@@ -147,12 +147,12 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
 
 
 11. zcat - LES EN PAKKET FIL
-   zcat leser en .gz-fil direkte, uten aa pakke den ut paa disk.
+   zcat leser en .gz-fil direkte, uten å pakke den ut på disk.
       zcat gammel.log.gz
 
 
 12. sort og uniq - RYDD I LINJER
-   sort stokker linjene i rekkefoelge saa like havner ved siden av hverandre.
+   sort stokker linjene i rekkefølge så like havner ved siden av hverandre.
    uniq -c teller, uniq -u viser bare de som finnes en gang.
       sort frukt.txt
       sort frukt.txt | uniq -c
@@ -165,7 +165,7 @@ Ta en kommando om gangen. Les hva den gjoer, skriv den av, se hva som skjer.
 
 
 =====================================================================
- Det var verktoeykassa: cat, ls -a, grep, find, tail, base64, rev, tr,
+ Det var verktøykassa: cat, ls -a, grep, find, tail, base64, rev, tr,
  xxd, chmod, zcat, sort|uniq og diff. Det er dette du trenger i CTF-en.
 =====================================================================
 EOF
