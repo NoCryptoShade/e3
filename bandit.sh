@@ -570,13 +570,13 @@ Hint: har brukeren din sudo, kan du lese root sine filer.
 EOF
 
 # =====================================================================
-# niva25: SISTE SKANSE (boss) - maa kombinere flere teknikker
+# niva25: BOSS - maa kombinere flere teknikker
 # Noekkel gjemt i binaerfil (strings), ROT13-rotert + base64-kodet,
 # passordet dekrypterer skatt.enc (openssl) som baerer fullfoeringsflagget.
 # =====================================================================
 cat > "$STAG/niva25/README.txt" <<'EOF'
-NIVAA 25 - SISTE SKANSE
-=======================
+NIVAA 25 - BOSS
+===============
 Siste nivaa. Her er det ingen ferdig oppskrift og ingen enkelt kommando.
 Du maa kombinere flere av triksene fra tidligere nivaa.
 
