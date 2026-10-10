@@ -570,17 +570,37 @@ Hint: har brukeren din sudo, kan du lese root sine filer.
 EOF
 
 # =====================================================================
-# niva25: FERDIG
+# niva25: SISTE SKANSE (boss) - maa kombinere flere teknikker
+# Noekkel gjemt i binaerfil (strings), ROT13-rotert + base64-kodet,
+# passordet dekrypterer skatt.enc (openssl) som baerer fullfoeringsflagget.
 # =====================================================================
-cat > "$STAG/niva25/README.txt" <<EOF
-NIVAA 25 - FERDIG
-=================
-Gratulerer! Du loeste hele kjeden, inkludert andreaars-nivaaene:
-cat, ls -a, grep, find, tail, base64, rev, tr, xxd, chmod, zcat, sort|uniq,
-diff, strings, ps, base32, john, zip2john, openssl og sudo.
+cat > "$STAG/niva25/README.txt" <<'EOF'
+NIVAA 25 - SISTE SKANSE
+=======================
+Siste nivaa. Her er det ingen ferdig oppskrift og ingen enkelt kommando.
+Du maa kombinere flere av triksene fra tidligere nivaa.
 
-Fullfoeringsflagg:  ${FLAG[25]}
+Maalet: dekrypter skatt.enc og finn fullfoeringsflagget.
+
+For aa klare det trenger du passordet til skatt.enc. Det ligger IKKE rett fram:
+  - Det er gjemt som lesbar tekst inne i binaerfila kjerne.bin.
+  - Linja er merket  NOKKEL= , men selve verdien er behandlet to ganger: foerst
+    kodet, saa rotert (ROT13) oppaa det. Du maa angre begge lag.
+  - Naar du har rullet tilbake rotasjonen og avkodet, har du passordet.
+
+skatt.enc er kryptert med openssl (aes-256-cbc med -pbkdf2 -md sha256, slik du
+saa paa nivaa 20).
+
+Dette er den som skiller de raske fra de som virkelig har foelget med.
 EOF
+# passordet til skatt.enc (tilfeldig per maskin)
+BOSS_PW="$(pw)"
+# noekkelen: base64(BOSS_PW) rotert med ROT13, gjemt som lesbar streng i binaerfil
+BOSS_KEY="$(printf '%s' "$BOSS_PW" | b64 | tr 'A-Za-z' 'N-ZA-Mn-za-m')"
+{ head -c 1200 /dev/urandom; printf '\nNOKKEL=%s\n' "$BOSS_KEY"; head -c 1200 /dev/urandom; echo; } > "$STAG/niva25/kjerne.bin"
+# skatten: fullfoeringsflagget, kryptert med BOSS_PW
+printf 'Gratulerer! Du kombinerte strings, ROT13, base64 og openssl.\nFullfoeringsflagg:  %s\n' "${FLAG[25]}" \
+  | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -salt -k "$BOSS_PW" -out "$STAG/niva25/skatt.enc"
 
 # =====================================================================
 # niva0 aapent, niva1..25 krypteres hver med passordet som aapner det
