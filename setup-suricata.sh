@@ -7,14 +7,20 @@
 #  attacks from Kali light up as alerts. Needs NO internet - it only touches
 #  files already on the box.
 #
-#  It does two things, permanently (safe to run again):
-#    1. Makes Suricata auto-pick the right network card on EVERY boot, so the
-#       same VM works on VirtualBox (enp0s3), VMware (ens33) and QEMU/UTM
-#       (enp0s1) alike. Without this, an imported VM gets stuck on
-#       "activating (start)" and produces no alerts.
+#  It does two things (safe to run again):
+#    1. Finds the real network card on THIS machine and writes it straight into
+#       suricata.yaml, so the same VM works on VirtualBox (enp0s3), VMware
+#       (ens33) and QEMU/UTM (enp0s1) alike. Without this, an imported VM gets
+#       stuck on "activating" / exits with no alerts because the card name in
+#       the config does not exist here. If you later move the VM to a DIFFERENT
+#       hypervisor, just run this script again.
 #    2. Loads the eight lab rules (SID 1000001-1000008) that map the week 6-7
 #       attacks (SSH brute force, hidden admin panel, portal login, webshell,
 #       command injection, SMB, FTP, exposed .git) to readable alerts.
+#
+#  NOTE: the card is written at setup time, as root, NOT via a boot-time systemd
+#  hook. Suricata 8's service runs with a read-only /etc sandbox (ProtectSystem),
+#  so an ExecStartPre hook cannot rewrite the config - doing it here avoids that.
 #
 #  HOW TO GET THIS FILE ONTO THE VICTIM
 #    - While the victim is on NAT for the scenario update, you can also grab it:
@@ -43,30 +49,43 @@ if ! command -v suricata >/dev/null 2>&1; then
   exit 1
 fi
 
-say "Installing boot-time NIC auto-detect"
-cat >/usr/local/sbin/suricata-pick-iface.sh <<'PICK'
-#!/usr/bin/env bash
-# Pick the real NIC (has /sys/class/net/<if>/device); skip lo/docker/veth/bridges.
+# --- remove the old broken boot-time hook if a previous version installed it ---
+# (an ExecStartPre that rewrote /etc fails under Suricata 8's read-only sandbox)
+if [ -f /etc/systemd/system/suricata.service.d/10-lab-iface.conf ]; then
+  say "Removing the old boot-time NIC hook (incompatible with Suricata 8 sandboxing)"
+  rm -f /etc/systemd/system/suricata.service.d/10-lab-iface.conf
+  rmdir /etc/systemd/system/suricata.service.d 2>/dev/null || true
+  rm -f /usr/local/sbin/suricata-pick-iface.sh
+  systemctl daemon-reload
+fi
+
+# --- detect the real network card on THIS machine ---------------------------
+say "Detecting the network card"
+IFACE=""
 for i in /sys/class/net/*; do
   n=${i##*/}; [ "$n" = lo ] && continue
   case "$n" in docker*|br-*|veth*|virbr*|vmnet*) continue;; esac
   [ -e "$i/device" ] || continue
   IFACE=$n; break
 done
-if [ -n "${IFACE:-}" ]; then
-  awk -v nic="$IFACE" '
-    /^af-packet:/{b=1}
-    b && /^[^[:space:]#]/ && !/^af-packet:/{b=0}
-    b && !d && /^[[:space:]]*-[[:space:]]*interface:/{sub(/interface:.*/,"interface: " nic); d=1}
-    {print}' /etc/suricata/suricata.yaml >/tmp/suricata.yaml.$$  && mv /tmp/suricata.yaml.$$ /etc/suricata/suricata.yaml
+if [ -z "$IFACE" ]; then
+  bad "Could not find a real network card. Check 'ip -brief addr'."
+  exit 1
 fi
-exit 0
-PICK
-chmod +x /usr/local/sbin/suricata-pick-iface.sh
-install -d /etc/systemd/system/suricata.service.d
-printf '[Service]\nExecStartPre=/usr/local/sbin/suricata-pick-iface.sh\n' \
-  >/etc/systemd/system/suricata.service.d/10-lab-iface.conf
-systemctl daemon-reload
+good "network card: $IFACE"
+
+# --- write that card into suricata.yaml (as root, no sandbox) ----------------
+# Use a temp file IN THE SAME directory as the target (no cross-device move),
+# then overwrite the target's contents (keeps its owner/permissions).
+say "Writing $IFACE into /etc/suricata/suricata.yaml"
+tmp="$(mktemp /etc/suricata/.suricata.yaml.XXXXXX)" || { bad "cannot write in /etc/suricata"; exit 1; }
+awk -v nic="$IFACE" '
+  /^af-packet:/{b=1}
+  b && /^[^[:space:]#]/ && !/^af-packet:/{b=0}
+  b && !d && /^[[:space:]]*-[[:space:]]*interface:/{sub(/interface:.*/,"interface: " nic); d=1}
+  {print}' /etc/suricata/suricata.yaml >"$tmp" \
+  && cat "$tmp" >/etc/suricata/suricata.yaml
+rm -f "$tmp"
 
 say "Loading the lab detection rules"
 install -d /var/lib/suricata/rules
@@ -87,10 +106,10 @@ systemctl enable suricata >/dev/null 2>&1 || true
 systemctl restart suricata
 sleep 6
 if systemctl is-active --quiet suricata; then
-  iface=$(awk '/^af-packet:/{b=1} b&&/- interface:/{print $3; exit}' /etc/suricata/suricata.yaml)
-  good "Suricata is running and sniffing: ${iface:-<unknown>}"
+  good "Suricata is running and sniffing: ${IFACE}"
   echo "    Now run your attacks from Kali and watch Evebox at https://<victim-ip>:5636/"
 else
-  bad "Suricata still not active. Check: sudo journalctl -u suricata -n 30 --no-pager"
+  bad "Suricata still not active. Send the output of:"
+  bad "    sudo journalctl -u suricata -n 30 --no-pager"
   exit 1
 fi
