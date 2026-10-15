@@ -1,115 +1,144 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Emne 3  -  SURICATA DETECTION on the VICTIM
+#  Emne 3  -  SURICATA NIC + RULE FIX on the VICTIM   (authored by Dag Thomas)
 # ----------------------------------------------------------------------------
-#  Run this ONCE on the VICTIM, after you have imported the VM. It gets the
-#  network IDS (Suricata) working and loads the lab detection rules, so your
-#  attacks from Kali light up as alerts. Needs NO internet - it only touches
-#  files already on the box.
+#  Run this ONCE on the VICTIM after importing the VM, as root:
+#        sudo bash setup-suricata.sh
 #
-#  It does two things (safe to run again):
-#    1. Finds the real network card on THIS machine and writes it straight into
-#       suricata.yaml, so the same VM works on VirtualBox (enp0s3), VMware
-#       (ens33) and QEMU/UTM (enp0s1) alike. Without this, an imported VM gets
-#       stuck on "activating" / exits with no alerts because the card name in
-#       the config does not exist here. If you later move the VM to a DIFFERENT
-#       hypervisor, just run this script again.
-#    2. Loads the eight lab rules (SID 1000001-1000008) that map the week 6-7
-#       attacks (SSH brute force, hidden admin panel, portal login, webshell,
-#       command injection, SMB, FTP, exposed .git) to readable alerts.
-#
-#  NOTE: the card is written at setup time, as root, NOT via a boot-time systemd
-#  hook. Suricata 8's service runs with a read-only /etc sandbox (ProtectSystem),
-#  so an ExecStartPre hook cannot rewrite the config - doing it here avoids that.
-#
-#  HOW TO GET THIS FILE ONTO THE VICTIM
-#    - While the victim is on NAT for the scenario update, you can also grab it:
-#          curl -fO https://nocryptoshade.github.io/e3/setup-suricata.sh
-#    - Or copy it over from Kali (victim is host-only):
-#          scp setup-suricata.sh labadmin@<victim-ip>:~
-#
-#  RUN IT (on the victim):
-#          sudo bash setup-suricata.sh
+#  What it does (safe to re-run, backs up everything it touches first):
+#    1. Installs a tiny launcher that picks the real network card AT BOOT and
+#       starts Suricata with --af-packet=<card> on the command line. This never
+#       edits /etc, so it works under Suricata 8's read-only service sandbox
+#       (ProtectSystem) - the thing that broke the old config-rewrite approach.
+#       The same VM then works on VirtualBox (enp0s3), VMware (ens33) and
+#       QEMU/UTM (enp0s1) with no change. It requires EXACTLY ONE hardware NIC;
+#       if you have both host-only and NAT attached at once it will refuse to
+#       start, so detach the extra adapter before running your detection tasks.
+#    2. Fixes the command-injection rule (SID 1000005) and keeps it on one line.
+#    3. Validates the full config with `suricata -T` before restarting, and
+#       drops a rollback.sh next to its backup so you can undo everything.
 #
 #  AFTER IT RUNS
 #    - View alerts in Evebox from Kali's Firefox:  https://<victim-ip>:5636/
-#    - To see the same alerts next to your host events in Wazuh (week 13),
-#      the victim's agent already tails /var/log/suricata/eve.json.
+#
+#  NOTE: it writes its backup + rollback.sh under ./Documentation/Fix Suricata
+#  NIC detection/ relative to wherever you run it, so run it from a folder you
+#  can find again (e.g. your home directory).
 # ============================================================================
-set -uo pipefail
-c_green="\e[32m"; c_red="\e[31m"; c_yellow="\e[33m"; c_reset="\e[0m"
-say(){ echo -e "${c_yellow}[*]${c_reset} $*"; }
-good(){ echo -e "${c_green}[OK]${c_reset} $*"; }
-bad(){ echo -e "${c_red}[!!]${c_reset} $*"; }
-[[ $EUID -eq 0 ]] || { bad "Run as root: sudo bash $0"; exit 1; }
-
-if ! command -v suricata >/dev/null 2>&1; then
-  bad "Suricata is not installed on this box. It should ship with the lab VM."
-  bad "If you built the victim yourself, install it first: sudo apt-get install -y suricata"
-  exit 1
-fi
-
-# --- remove the old broken boot-time hook if a previous version installed it ---
-# (an ExecStartPre that rewrote /etc fails under Suricata 8's read-only sandbox)
-if [ -f /etc/systemd/system/suricata.service.d/10-lab-iface.conf ]; then
-  say "Removing the old boot-time NIC hook (incompatible with Suricata 8 sandboxing)"
-  rm -f /etc/systemd/system/suricata.service.d/10-lab-iface.conf
-  rmdir /etc/systemd/system/suricata.service.d 2>/dev/null || true
-  rm -f /usr/local/sbin/suricata-pick-iface.sh
-  systemctl daemon-reload
-fi
-
-# --- detect the real network card on THIS machine ---------------------------
-say "Detecting the network card"
-IFACE=""
-for i in /sys/class/net/*; do
-  n=${i##*/}; [ "$n" = lo ] && continue
-  case "$n" in docker*|br-*|veth*|virbr*|vmnet*) continue;; esac
-  [ -e "$i/device" ] || continue
-  IFACE=$n; break
+set -euo pipefail
+umask 022
+helper=/usr/local/sbin/suricata-pick-iface.sh
+dropin=/etc/systemd/system/suricata.service.d/10-lab-iface.conf
+rules=/var/lib/suricata/rules/local.rules
+backup="$PWD/Documentation/Fix Suricata NIC detection/backup-$(date +%Y%m%d-%H%M%S)-$$"
+mkdir -p -- "$backup/before"
+chmod 700 -- "$backup"
+for file in "$helper" "$dropin" "$rules"; do
+    if [[ -e "$file" ]]; then
+        cp -a --parents -- "$file" "$backup/before"
+    else
+        printf '%s\n' "$file" >> "$backup/absent-files"
+    fi
 done
-if [ -z "$IFACE" ]; then
-  bad "Could not find a real network card. Check 'ip -brief addr'."
-  exit 1
-fi
-good "network card: $IFACE"
+printf 'Backups: %s\nRollback: sudo bash %q\n' "$backup" "$backup/rollback.sh"
+trap 'echo "Stopped on error. Use the rollback command printed above." >&2' ERR
 
-# --- write that card into suricata.yaml (as root, no sandbox) ----------------
-# Use a temp file IN THE SAME directory as the target (no cross-device move),
-# then overwrite the target's contents (keeps its owner/permissions).
-say "Writing $IFACE into /etc/suricata/suricata.yaml"
-tmp="$(mktemp /etc/suricata/.suricata.yaml.XXXXXX)" || { bad "cannot write in /etc/suricata"; exit 1; }
-awk -v nic="$IFACE" '
-  /^af-packet:/{b=1}
-  b && /^[^[:space:]#]/ && !/^af-packet:/{b=0}
-  b && !d && /^[[:space:]]*-[[:space:]]*interface:/{sub(/interface:.*/,"interface: " nic); d=1}
-  {print}' /etc/suricata/suricata.yaml >"$tmp" \
-  && cat "$tmp" >/etc/suricata/suricata.yaml
-rm -f "$tmp"
-
-say "Loading the lab detection rules"
-install -d /var/lib/suricata/rules
-cat >/var/lib/suricata/rules/local.rules <<'RULES'
-# --- Emne 3 lab rules: map week 6-7 attacks to visible alerts ---------------
-alert tcp any any -> $HOME_NET 22 (msg:"LAB SSH brute-force (many SYN to 22)"; flow:to_server; flags:S; threshold:type both, track by_src, count 10, seconds 30; classtype:attempted-recon; sid:1000001; rev:1;)
-alert http any any -> $HOME_NET any (msg:"LAB hidden admin panel access"; flow:to_server; http.uri; content:"/admin"; nocase; classtype:web-application-activity; sid:1000002; rev:1;)
-alert http any any -> $HOME_NET any (msg:"LAB portal login attempt (POST /portal)"; flow:to_server; http.method; content:"POST"; http.uri; content:"/portal/index.php"; classtype:web-application-activity; sid:1000003; rev:1;)
-alert http any any -> $HOME_NET any (msg:"LAB possible webshell request in /portal/uploads"; flow:to_server; http.uri; content:"/portal/uploads/"; pcre:"/\.php/U"; classtype:web-application-attack; sid:1000004; rev:1;)
-alert http any any -> $HOME_NET any (msg:"LAB command-injection markers in ping host param"; flow:to_server; http.uri; content:"ping.php"; content:"host="; pcre:"/host=[^&]*[\x3b&|\x60]/U"; classtype:web-application-attack; sid:1000005; rev:2;)
-alert tcp any any -> $HOME_NET 445 (msg:"LAB SMB access attempt"; flow:to_server; classtype:attempted-recon; sid:1000006; rev:1;)
-alert tcp any any -> $HOME_NET 21 (msg:"LAB FTP access attempt"; flow:to_server; classtype:attempted-recon; sid:1000007; rev:1;)
-alert http any any -> $HOME_NET any (msg:"LAB exposed .git access"; flow:to_server; http.uri; content:"/.git/"; classtype:web-application-activity; sid:1000008; rev:1;)
-RULES
-
-say "Starting Suricata"
-systemctl enable suricata >/dev/null 2>&1 || true
+cat > "$backup/rollback.sh" <<'ROLLBACK'
+#!/usr/bin/env bash
+set -euo pipefail
+backup=$(cd -- "$(dirname -- "$0")" && pwd)
+for file in /usr/local/sbin/suricata-pick-iface.sh \
+            /etc/systemd/system/suricata.service.d/10-lab-iface.conf \
+            /var/lib/suricata/rules/local.rules; do
+    if [[ -e "$backup/before$file" ]]; then
+        cp -a -- "$backup/before$file" "$file"
+    elif [[ -e "$file" ]]; then
+        mkdir -p -- "$backup/after$(dirname -- "$file")"
+        mv -- "$file" "$backup/after$file"
+    fi
+done
+systemctl daemon-reload
 systemctl restart suricata
-sleep 6
-if systemctl is-active --quiet suricata; then
-  good "Suricata is running and sniffing: ${IFACE}"
-  echo "    Now run your attacks from Kali and watch Evebox at https://<victim-ip>:5636/"
-else
-  bad "Suricata still not active. Send the output of:"
-  bad "    sudo journalctl -u suricata -n 30 --no-pager"
-  exit 1
+systemctl is-active suricata
+ROLLBACK
+
+# 1) Install the NIC launcher.
+cat > "$backup/suricata-pick-iface.sh" <<'PICK'
+#!/usr/bin/env bash
+set -euo pipefail
+interfaces=()
+for path in /sys/class/net/*; do
+    name=${path##*/}
+    case "$name" in
+        lo|docker*|br-*|veth*|virbr*|vmnet*) continue ;;
+    esac
+    [[ -e "$path/device" ]] || continue
+    interfaces+=("$name")
+done
+if (( ${#interfaces[@]} != 1 )); then
+    printf 'Expected one hardware NIC; found %s.\n' "${#interfaces[@]}" >&2
+    exit 1
 fi
+iface=${interfaces[0]}
+printf 'Suricata: selected interface %s\n' "$iface"
+
+# Add local.rules only when the YAML does not already load it.
+rules=$(realpath -m -- /var/lib/suricata/rules/local.rules)
+dump=$(/usr/bin/suricata --dump-config -c /etc/suricata/suricata.yaml)
+rule_dir=$(awk '/^default-rule-path = / {sub(/^[^=]*= /, ""); print; exit}' <<< "$dump")
+extra_rules=(-s "$rules")
+while IFS= read -r pattern; do
+    if [[ "$pattern" != /* ]]; then
+        [[ -n "$rule_dir" ]] || { echo 'Missing default-rule-path.' >&2; exit 1; }
+        pattern="$rule_dir/$pattern"
+    fi
+    pattern=$(realpath -m -- "$pattern")
+    if [[ "$rules" == $pattern ]]; then
+        extra_rules=()
+        break
+    fi
+done < <(awk '/^rule-files\.[0-9]+ = / {sub(/^[^=]*= /, ""); print}' <<< "$dump")
+
+common=(-c /etc/suricata/suricata.yaml
+        --set "af-packet.0.interface=$iface" "${extra_rules[@]}")
+if [[ ${1:-} == --test ]]; then
+    exec /usr/bin/suricata -T --init-errors-fatal "${common[@]}"
+fi
+exec /usr/bin/suricata -D --af-packet="$iface" "${common[@]}" \
+    --pidfile /var/run/suricata/suricata.pid
+PICK
+bash -n "$backup/suricata-pick-iface.sh"
+
+# 2) Replace only SID 1000005, keeping the rule on one line.
+if [[ -f "$rules" ]]; then
+    awk '!/sid:[[:space:]]*1000005[[:space:]]*;/' "$rules" > "$backup/local.rules.new"
+else
+    : > "$backup/local.rules.new"
+fi
+cat >> "$backup/local.rules.new" <<'RULE'
+alert http any any -> $HOME_NET any (msg:"LAB command-injection"; flow:to_server; http.uri; content:"ping.php"; content:"host="; pcre:"/host=[^&]*[\x3b&|\x60]/"; classtype:web-application-attack; sid:1000005; rev:2;)
+RULE
+printf 'Testing local rules; this may take a few minutes...\n'
+timeout --kill-after=30s 10m /usr/bin/suricata -T --init-errors-fatal \
+    -c /etc/suricata/suricata.yaml -S "$backup/local.rules.new"
+
+install -d /usr/local/sbin /etc/systemd/system/suricata.service.d /var/lib/suricata/rules
+install -m 0755 "$backup/suricata-pick-iface.sh" "$helper"
+cat > "$dropin" <<'UNIT'
+[Service]
+ExecStartPre=
+ExecStart=
+ExecStart=/usr/local/sbin/suricata-pick-iface.sh
+TimeoutStartSec=10min
+UNIT
+cat "$backup/local.rules.new" > "$rules"
+
+# 3) Validate the full configuration, then restart and verify.
+printf 'Testing full configuration; this may take a few minutes...\n'
+timeout --kill-after=30s 10m "$helper" --test
+systemctl daemon-reload
+printf 'Restarting Suricata; allowing up to 10 minutes for startup...\n'
+systemctl restart suricata
+sleep 5
+systemctl is-active suricata
+journalctl -u suricata -n 12 --no-pager
